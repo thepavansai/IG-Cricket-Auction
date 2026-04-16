@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/rs/cors"
@@ -232,7 +234,19 @@ func main() {
 	mux.HandleFunc("/images/", imageProxyHandler)
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"},
+		AllowOriginFunc: func(origin string) bool {
+			u, err := url.Parse(origin)
+			if err != nil {
+				return false
+			}
+
+			host := strings.ToLower(u.Hostname())
+			if host == "localhost" || host == "127.0.0.1" {
+				return true
+			}
+
+			return host == "thepavansai.github.io"
+		},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
