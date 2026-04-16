@@ -1,0 +1,34 @@
+# Logs
+*.log
+*.logs
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.sublime-project
+.sublime-workspace
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Misc
+.cache/
+.vite/
+temp/
+tmp/

@@ -1,0 +1,277 @@
+import { useState, useEffect, useRef } from 'react'
+import SetupView from './views/SetupView.jsx'
+import AuctionView from './views/AuctionView.jsx'
+import ExportView from './views/ExportView.jsx'
+import { Moon, Sun, Trash2 } from 'lucide-react'
+
+const SESSION_KEY = 'cricket-auction-session'
+const APP_KEYS = [
+  SESSION_KEY,
+  'cricket-auction-setup-draft',
+  'cricket-auction-auction-draft',
+  'cricket-auction-auction-history',
+  'cricket-auction-bid-snapshots'
+]
+
+const safeParse = (value, fallback) => {
+  try {
+    return value ? JSON.parse(value) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const loadSession = () => safeParse(localStorage.getItem(SESSION_KEY), null)
+
+export default function App() {
+  const savedSession = loadSession()
+  const [view, setView] = useState(savedSession?.view || 'setup')
+  const [masterRoster, setMasterRoster] = useState(savedSession?.masterRoster || [])
+  const [config, setConfig] = useState(savedSession?.config || null)
+  const [theme, setTheme] = useState(() => savedSession?.theme || localStorage.getItem('theme') || 'dark')
+  const [toast, setToast] = useState({ visible: false, message: '' })
+  const lastSessionRef = useRef(null)
+  const toastTimerRef = useRef(null)
+  const allowReloadRef = useRef(false)
+
+  const showToast = (message) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current)
+    }
+
+    setToast({ visible: true, message })
+    toastTimerRef.current = setTimeout(() => {
+      setToast({ visible: false, message: '' })
+    }, 2600)
+  }
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  useEffect(() => {
+    const nextSession = { view, masterRoster, config, theme }
+
+    lastSessionRef.current = nextSession
+    localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession))
+  }, [view, masterRoster, config, theme])
+
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      if (allowReloadRef.current) {
+        return
+      }
+
+      if (view !== 'setup' || masterRoster.length > 0 || config) {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [view, masterRoster.length, config])
+
+  useEffect(() => {
+    const handleRefreshShortcut = (event) => {
+      const key = event.key.toLowerCase()
+      const isRefreshShortcut = event.key === 'F5' || ((event.ctrlKey || event.metaKey) && key === 'r')
+
+      if (!isRefreshShortcut) {
+        return
+      }
+
+      event.preventDefault()
+      showToast('Refresh requested. Complete 3 confirmations to continue.')
+
+      const prompts = [
+        'Refresh confirmation 1/3: Reload the page?',
+        'Refresh confirmation 2/3: Unsaved progress may be interrupted. Continue?',
+        'Refresh confirmation 3/3: Final confirmation. Refresh now?'
+      ]
+
+      for (let i = 0; i < prompts.length; i++) {
+        const ok = window.confirm(prompts[i])
+        if (!ok) {
+          showToast(`Refresh cancelled at step ${i + 1}/3.`)
+          return
+        }
+      }
+
+      allowReloadRef.current = true
+      showToast('Refreshing...')
+      setTimeout(() => window.location.reload(), 120)
+    }
+
+    window.addEventListener('keydown', handleRefreshShortcut)
+    return () => window.removeEventListener('keydown', handleRefreshShortcut)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current)
+      }
+    }
+  }, [])
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
+  const clearSavedData = () => {
+    const confirmed = window.confirm('Clear saved auction data from this browser?')
+    if (!confirmed) return
+
+    APP_KEYS.forEach(key => localStorage.removeItem(key))
+    setView('setup')
+    setMasterRoster([])
+    setConfig(null)
+    setTheme('dark')
+  }
+
+  const clearSession = () => {
+    setView('setup')
+    setMasterRoster([])
+    setConfig(null)
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem('cricket-auction-setup-draft')
+    localStorage.removeItem('cricket-auction-auction-draft')
+    localStorage.removeItem('cricket-auction-auction-history')
+  }
+
+  const handleSetupComplete = (roster, cfg) => {
+    setMasterRoster(roster)
+    setConfig(cfg)
+    setView('auction')
+  }
+
+  const handleAuctionDone = (updatedRoster) => {
+    setMasterRoster(updatedRoster)
+    setView('export')
+  }
+
+  const handleRestart = () => {
+    clearSession()
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <header style={{
+        background: 'var(--bg2)',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 2rem',
+        height: '56px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '1.5rem' }}>🏏</span>
+          <span style={{
+            fontFamily: 'Bebas Neue',
+            fontSize: '1.5rem',
+            letterSpacing: '0.1em',
+            color: 'var(--green)'
+          }}>CRICKET AUCTION</span>
+          <span style={{
+            fontSize: '0.65rem',
+            background: 'var(--bg3)',
+            border: '1px solid var(--border)',
+            padding: '2px 8px',
+            borderRadius: '100px',
+            color: 'var(--muted)',
+            letterSpacing: '0.1em'
+          }}>Beta</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {['Setup', 'Auction', 'Export'].map((label, i) => {
+            const steps = ['setup', 'auction', 'export']
+            const active = view === steps[i]
+            const done = steps.indexOf(view) > i
+            return (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '4px 12px',
+                  borderRadius: '100px',
+                  background: active ? 'var(--green)' : done ? 'var(--bg3)' : 'transparent',
+                  border: `1px solid ${active ? 'var(--green)' : done ? 'var(--border)' : 'var(--border)'}`,
+                  color: active ? '#000' : done ? 'var(--muted)' : 'var(--muted)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s'
+                }}>
+                  <span>{done && !active ? '✓' : i + 1}</span>
+                  <span>{label}</span>
+                </div>
+                {i < 2 && <span style={{ color: 'var(--border)' }}>→</span>}
+              </div>
+            )
+          })}
+
+          <button
+            onClick={toggleTheme}
+            className="theme-toggle"
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+
+          <button
+            onClick={clearSavedData}
+            className="theme-toggle"
+            title="Clear saved auction data"
+            style={{ color: 'var(--red)' }}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </header>
+
+      {view === 'setup' && (
+        <SetupView onComplete={handleSetupComplete} />
+      )}
+      {view === 'auction' && (
+        <AuctionView
+          masterRoster={masterRoster}
+          config={config}
+          onDone={handleAuctionDone}
+          onClearSession={clearSession}
+        />
+      )}
+      {view === 'export' && (
+        <ExportView
+          masterRoster={masterRoster}
+          onRestart={handleRestart}
+          onClearSession={clearSession}
+        />
+      )}
+
+      {toast.visible && (
+        <div style={{
+          position: 'fixed',
+          right: '18px',
+          bottom: '18px',
+          zIndex: 9999,
+          background: 'var(--bg3)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          borderLeft: '3px solid var(--gold)',
+          borderRadius: '8px',
+          padding: '10px 12px',
+          fontSize: '0.82rem',
+          maxWidth: '320px',
+          boxShadow: '0 8px 22px rgba(0,0,0,0.35)'
+        }}>
+          {toast.message}
+        </div>
+      )}
+    </div>
+  )
+}

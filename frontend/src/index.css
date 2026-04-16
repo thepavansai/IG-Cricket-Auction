@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --green: #00c853;
+  --green-dim: #00963e;
+  --gold: #ffd600;
+  --gold-dim: #c9a800;
+  --red: #ff3d3d;
+  --bg: #0a0f0d;
+  --bg2: #111a14;
+  --bg3: #162019;
+  --card: #1a2a1e;
+  --border: #2a3f2e;
+  --text: #e8f5e9;
+  --muted: #7a9c7e;
+}
+
+[data-theme="light"] {
+  --green: #00a84d;
+  --green-dim: #0d7a38;
+  --gold: #cc8a00;
+  --gold-dim: #994d00;
+  --red: #d32f2f;
+  --bg: #ffffff;
+  --bg2: #f5f5f5;
+  --bg3: #eeeeee;
+  --card: #fafafa;
+  --border: #e0e0e0;
+  --text: #1a1a1a;
+  --muted: #666666;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+h1, h2, h3, .display {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.05em;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+.glow-green { box-shadow: 0 0 20px rgba(0, 200, 83, 0.25); }
+.glow-gold { box-shadow: 0 0 20px rgba(255, 214, 0, 0.25); }
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse { animation: pulse-green 2s ease-in-out infinite; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.slide-in { animation: slideIn 0.4s ease forwards; }
+
+@keyframes pop {
+  0% { transform: scale(0.95); opacity: 0; }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pop { animation: pop 0.35s ease forwards; }
+
+/* Theme toggle button */
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-toggle:hover {
+  background: var(--bg3);
+  border-color: var(--text);
+}
