@@ -31,6 +31,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => savedSession?.theme || localStorage.getItem('theme') || 'dark')
   const [toast, setToast] = useState({ visible: false, message: '' })
   const [refreshStep, setRefreshStep] = useState(0)
+  const [clearConfirm, setClearConfirm] = useState(false)
   const lastSessionRef = useRef(null)
   const toastTimerRef = useRef(null)
   const allowReloadRef = useRef(false)
@@ -140,14 +141,23 @@ export default function App() {
   }
 
   const clearSavedData = () => {
-    const confirmed = window.confirm('Clear saved auction data from this browser?')
-    if (!confirmed) return
+    setClearConfirm(true)
+    showToast('Clear all saved auction data from this browser?', { persistent: true })
+  }
 
+  const handleClearConfirm = () => {
     APP_KEYS.forEach(key => localStorage.removeItem(key))
     setView('setup')
     setMasterRoster([])
     setConfig(null)
     setTheme('dark')
+    setClearConfirm(false)
+    showToast('Saved data cleared.')
+  }
+
+  const handleClearCancel = () => {
+    setClearConfirm(false)
+    showToast('Clear data cancelled.')
   }
 
   const clearSession = () => {
@@ -319,6 +329,40 @@ export default function App() {
                 }}
               >
                 Continue ({refreshStep}/3)
+              </button>
+            </div>
+          )}
+
+          {clearConfirm && refreshStep === 0 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+              <button
+                onClick={handleClearCancel}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  color: 'var(--muted)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearConfirm}
+                style={{
+                  background: 'var(--red)',
+                  border: 'none',
+                  color: '#fff',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  fontWeight: 700
+                }}
+              >
+                Clear Data
               </button>
             </div>
           )}
