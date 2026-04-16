@@ -9,6 +9,15 @@ const API = 'http://localhost:8080'
 const AUCTION_DRAFT_KEY = 'cricket-auction-auction-draft'
 const BIDS_KEY = 'cricket-auction-bid-snapshots'
 
+const formatInLakhs = (amount) => {
+  const value = Number(amount || 0)
+  if (value >= 100) {
+    const crValue = value / 100
+    return `${Number.isInteger(crValue) ? crValue : crValue.toFixed(2)} Cr`
+  }
+  return `${value.toLocaleString('en-IN')} L`
+}
+
 const readDraft = () => {
   try {
     return JSON.parse(localStorage.getItem(AUCTION_DRAFT_KEY) || 'null')
@@ -134,7 +143,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
 
     const team = teams.find(t => t.id === selectedTeam)
     if (team && amount > team.budget) {
-      setBidMsg(`${team.name} only has ₹${team.budget.toLocaleString()} left`)
+      setBidMsg(`${team.name} only has ${formatInLakhs(team.budget)} left`)
       setBidStatus('error')
       return
     }
@@ -169,7 +178,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
       })
       setRoster(updatedRoster)
       setBidStatus('success')
-      setBidMsg(`Sold to ${team?.name} for ₹${amount.toLocaleString()}!`)
+      setBidMsg(`Sold to ${team?.name} for ${formatInLakhs(amount)}!`)
       await fetchTeams()
 
       setTimeout(() => advancePlayer(updatedRoster), 1200)
@@ -325,7 +334,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <StatChip label="SKILL LEVEL" value={currentPlayer.SkillLevel || 'N/A'} />
-              <StatChip label="BASE PRICE" value={`₹${currentPlayer.BasePrice.toLocaleString()}`} highlight />
+              <StatChip label="BASE PRICE" value={formatInLakhs(currentPlayer.BasePrice)} highlight />
               <StatChip label="ROLE" value={currentPlayer.Role || 'N/A'} />
               <StatChip label="STATUS" value={currentPlayer.Status} />
             </div>
@@ -368,7 +377,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
               >
                 {teams.map(t => (
                   <option key={t.id} value={t.id}>
-                    {t.name} (₹{t.budget.toLocaleString()})
+                    {t.name} ({formatInLakhs(t.budget)})
                   </option>
                 ))}
               </select>
@@ -376,15 +385,15 @@ export default function AuctionView({ masterRoster, config, onDone }) {
 
             <div>
               <label style={{ fontSize: '0.75rem', color: 'var(--muted)', display: 'block', marginBottom: '6px' }}>
-                BID AMOUNT (₹)
+                BID AMOUNT (L)
               </label>
               <input
                 type="number"
                 value={bidAmount}
                 onChange={e => setBidAmount(e.target.value)}
-                placeholder={`Min ${currentPlayer.BasePrice}`}
+                placeholder={`Min ${formatInLakhs(currentPlayer.BasePrice)}`}
                 min={currentPlayer.BasePrice}
-                step={1000}
+                step={1}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -502,7 +511,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {teams.map(team => {
-            const pct = Math.round((team.budget / (config?.basePurse || 100000)) * 100)
+            const pct = Math.round((team.budget / (config?.basePurse || 100)) * 100)
             const barColor = pct > 50 ? 'var(--green)' : pct > 20 ? 'var(--gold)' : 'var(--red)'
             return (
               <div
@@ -534,7 +543,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
                     fontSize: '1rem',
                     color: barColor
                   }}>
-                    ₹{team.budget.toLocaleString()}
+                    {formatInLakhs(team.budget)}
                   </div>
                 </div>
 

@@ -2,6 +2,15 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Download, RotateCcw, Trophy, Users, FileSpreadsheet } from 'lucide-react'
 
+const formatInLakhs = (amount) => {
+  const value = Number(amount || 0)
+  if (value >= 100) {
+    const crValue = value / 100
+    return `${Number.isInteger(crValue) ? crValue : crValue.toFixed(2)} Cr`
+  }
+  return `${value.toLocaleString('en-IN')} L`
+}
+
 export default function ExportView({ masterRoster, onRestart }) {
   const [exported, setExported] = useState(false)
 
@@ -25,10 +34,10 @@ export default function ExportView({ masterRoster, onRestart }) {
         'Role': p.Role,
         'Skill Level': p.SkillLevel,
         'Email': p.Email,
-        'Base Price': p.BasePrice,
+        'Base Price (Lakh)': p.BasePrice,
         'Status': p.Status,
         'Winning Team': p.WinningTeam,
-        'Winning Bid': p.WinningBid
+        'Winning Bid (Lakh)': p.WinningBid
       }))
     )
     XLSX.utils.book_append_sheet(wb, masterSheet, 'Master Roster')
@@ -40,7 +49,7 @@ export default function ExportView({ masterRoster, onRestart }) {
         'Keka ID': p.KekaID,
         'Full Name': p.Name,
         'Role': p.Role,
-        'Winning Bid': p.WinningBid
+        'Winning Bid (Lakh)': p.WinningBid
       }))
 
     const squadsSheet = XLSX.utils.json_to_sheet(teamSquadData)
@@ -76,7 +85,7 @@ export default function ExportView({ masterRoster, onRestart }) {
       }}>
         <SummaryCard icon={<Trophy size={20} />} label="Players Sold" value={soldPlayers.length} color="var(--gold)" />
         <SummaryCard icon={<Users size={20} />} label="Total Teams" value={Object.keys(teamTally).length} color="var(--green)" />
-        <SummaryCard icon={<FileSpreadsheet size={20} />} label="Total Bid Value" value={`₹${soldPlayers.reduce((s, p) => s + p.WinningBid, 0).toLocaleString()}`} color="var(--text)" />
+        <SummaryCard icon={<FileSpreadsheet size={20} />} label="Total Bid Value" value={formatInLakhs(soldPlayers.reduce((s, p) => s + p.WinningBid, 0))} color="var(--text)" />
       </div>
 
       {Object.keys(teamTally).length > 0 && (
@@ -108,7 +117,7 @@ export default function ExportView({ masterRoster, onRestart }) {
                   <div style={{ fontWeight: 600 }}>{team}</div>
                   <div style={{ display: 'flex', gap: '20px' }}>
                     <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{data.count} players</span>
-                    <span style={{ color: 'var(--gold)', fontWeight: 700, fontSize: '0.9rem' }}>₹{data.spend.toLocaleString()} spent</span>
+                    <span style={{ color: 'var(--gold)', fontWeight: 700, fontSize: '0.9rem' }}>{formatInLakhs(data.spend)} spent</span>
                   </div>
                 </div>
               ))}

@@ -30,20 +30,36 @@ export default function App() {
   const [config, setConfig] = useState(savedSession?.config || null)
   const [theme, setTheme] = useState(() => savedSession?.theme || localStorage.getItem('theme') || 'dark')
   const [toast, setToast] = useState({ visible: false, message: '' })
+  const [refreshStep, setRefreshStep] = useState(0)
   const lastSessionRef = useRef(null)
   const toastTimerRef = useRef(null)
   const allowReloadRef = useRef(false)
 
-  const showToast = (message) => {
+  const showToast = (message, options = {}) => {
+    const persistent = Boolean(options.persistent)
+
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current)
     }
 
-    setToast({ visible: true, message })
-    toastTimerRef.current = setTimeout(() => {
-      setToast({ visible: false, message: '' })
-    }, 2600)
+    setToast({ visible: true, message, persistent })
+    if (!persistent) {
+      toastTimerRef.current = setTimeout(() => {
+        setToast({ visible: false, message: '', persistent: false })
+      }, 2600)
+    }
   }
+
+  useEffect(() => {
+    if (refreshStep === 0) return
+
+    const stepMessages = [
+      'Refresh confirmation 1/3: Click Continue to start refresh flow.',
+      'Refresh confirmation 2/3: Unsaved progress may be interrupted.',
+      'Refresh confirmation 3/3: Final confirmation before reload.'
+    ]
+    showToast(stepMessages[refreshStep - 1], { persistent: true })
+  }, [refreshStep])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -83,30 +99,33 @@ export default function App() {
       }
 
       event.preventDefault()
-      showToast('Refresh requested. Complete 3 confirmations to continue.')
-
-      const prompts = [
-        'Refresh confirmation 1/3: Reload the page?',
-        'Refresh confirmation 2/3: Unsaved progress may be interrupted. Continue?',
-        'Refresh confirmation 3/3: Final confirmation. Refresh now?'
-      ]
-
-      for (let i = 0; i < prompts.length; i++) {
-        const ok = window.confirm(prompts[i])
-        if (!ok) {
-          showToast(`Refresh cancelled at step ${i + 1}/3.`)
-          return
-        }
+      if (refreshStep === 0) {
+        setRefreshStep(1)
+      } else {
+        showToast(`Refresh confirmation ${refreshStep}/3 pending.`, { persistent: true })
       }
-
-      allowReloadRef.current = true
-      showToast('Refreshing...')
-      setTimeout(() => window.location.reload(), 120)
     }
 
     window.addEventListener('keydown', handleRefreshShortcut)
     return () => window.removeEventListener('keydown', handleRefreshShortcut)
-  }, [])
+  }, [refreshStep])
+
+  const handleRefreshContinue = () => {
+    if (refreshStep < 3) {
+      setRefreshStep(current => current + 1)
+      return
+    }
+
+    allowReloadRef.current = true
+    setRefreshStep(0)
+    showToast('Refreshing...')
+    setTimeout(() => window.location.reload(), 120)
+  }
+
+  const handleRefreshCancel = () => {
+    setRefreshStep(0)
+    showToast('Refresh cancelled.')
+  }
 
   useEffect(() => {
     return () => {
@@ -269,7 +288,40 @@ export default function App() {
           maxWidth: '320px',
           boxShadow: '0 8px 22px rgba(0,0,0,0.35)'
         }}>
-          {toast.message}
+          <div>{toast.message}</div>
+          {refreshStep > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+              <button
+                onClick={handleRefreshCancel}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  color: 'var(--muted)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRefreshContinue}
+                style={{
+                  background: 'var(--gold)',
+                  border: 'none',
+                  color: '#000',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  fontWeight: 700
+                }}
+              >
+                Continue ({refreshStep}/3)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -15,7 +15,7 @@ export default function SetupView({ onComplete }) {
 
   const [imagePath, setImagePath] = useState(savedSetupDraft?.imagePath || '')
   const [teamsInput, setTeamsInput] = useState(savedSetupDraft?.teamsInput || '')
-  const [basePurse, setBasePurse] = useState(savedSetupDraft?.basePurse || 100000)
+  const [basePurse, setBasePurse] = useState(savedSetupDraft?.basePurse || 100)
   const [rosterFile, setRosterFile] = useState(savedSetupDraft?.rosterFileName ? { name: savedSetupDraft.rosterFileName } : null)
   const [parsedCount, setParsedCount] = useState(savedSetupDraft?.parsedCount || 0)
   const [parsedRoster, setParsedRoster] = useState(savedSetupDraft?.parsedRoster || [])
@@ -120,7 +120,7 @@ export default function SetupView({ onComplete }) {
             SkillLevel: String(skillLevelIndex >= 0 ? row[skillLevelIndex] : '').trim(),
             Email: String(emailIndex >= 0 ? row[emailIndex] : '').trim(),
             ImagePath: String(photoIndex >= 0 ? row[photoIndex] : '').trim(),
-            BasePrice: 5000,
+            BasePrice: 2,
             Status: "Unsold",
             WinningTeam: "None",
             WinningBid: 0
@@ -199,13 +199,13 @@ export default function SetupView({ onComplete }) {
           />
         </Field>
 
-        <Field icon={<DollarSign size={16} />} label="Starting Purse per Team" hint="Amount in currency units">
+        <Field icon={<DollarSign size={16} />} label="Starting Purse per Team" hint="Use lakhs (100 = 1 Cr)">
           <input
             type="number"
             value={basePurse}
             onChange={e => setBasePurse(e.target.value)}
-            min={1000}
-            step={1000}
+            min={1}
+            step={1}
             style={inputStyle}
           />
         </Field>
