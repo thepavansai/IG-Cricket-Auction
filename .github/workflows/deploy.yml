@@ -27,7 +27,7 @@ jobs:
         run: cd frontend && npm install
 
       - name: Build
-        run: cd frontend && npm run build
+        run: cd frontend && npm run build -- --base=/${{ github.event.repository.name }}/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
