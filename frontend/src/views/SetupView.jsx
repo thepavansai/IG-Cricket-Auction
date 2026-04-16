@@ -295,7 +295,7 @@ export default function SetupView({ onComplete }) {
         </button>
 
         <p style={{ color: 'var(--muted)', fontSize: '0.75rem', textAlign: 'center', margin: 0 }}>
-          Make sure <code style={{ background: 'var(--bg3)', padding: '1px 6px', borderRadius: '4px' }}>go run main.go</code> is running in the backend folder before proceeding
+          Make sure sure your backend Go server is running on <code style={{ background: 'var(--bg2)', padding: '2px 4px', borderRadius: '4px' }}>http://localhost:8080</code> for the setup to work.
         </p>
         <p style={{ color: 'var(--muted)', fontSize: '0.75rem', textAlign: 'center', margin: '6px 0 0' }}>
           Setup autosaves locally and keeps the last 3 backups so you can recover after a refresh.
