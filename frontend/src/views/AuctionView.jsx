@@ -59,13 +59,26 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const [bidStatus, setBidStatus] = useState(null)
   const [bidMsg, setBidMsg] = useState('')
   const [imgError, setImgError] = useState(false)
-  const [storageWarning, setStorageWarning] = useState('')
+  const [storageWarning, setStorageWarning] = useState({ message: '', persistent: false })
   const [connectionStatus, setConnectionStatus] = useState('ok')
   const failCountRef = useRef(0)
+  const warningTimerRef = useRef(null)
 
   const showToast = (message, options = {}) => {
-    if (options.persistent) {
-      setStorageWarning(message)
+    const persistent = Boolean(options.persistent)
+
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current)
+      warningTimerRef.current = null
+    }
+
+    setStorageWarning({ message, persistent })
+
+    if (!persistent) {
+      warningTimerRef.current = setTimeout(() => {
+        setStorageWarning({ message: '', persistent: false })
+        warningTimerRef.current = null
+      }, 2600)
     }
   }
 
@@ -78,6 +91,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         setBidSnapshots([])
         try {
           localStorage.setItem(key, value)
+          showToast('Storage full — bid history cleared.', { persistent: false })
         } catch {
           showToast(
             'Storage full — bid history cleared. Auction state is safe.',
@@ -111,28 +125,38 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     safeSetItem(BIDS_KEY, JSON.stringify(bidSnapshots.slice(0, 20)))
   }, [roster, currentPlayerKekaID, selectedTeam, bidAmount, auctionPhase, bidSnapshots])
 
+  useEffect(() => {
+    return () => {
+      if (warningTimerRef.current) {
+        clearTimeout(warningTimerRef.current)
+      }
+    }
+  }, [])
+
   // Filter roster based on current phase
   const phaseRoster = auctionPhase === 'captain'
-    ? roster.filter(p => p.IsCaptain && p.Status !== 'Sold')
-    : roster.filter(p => !p.IsCaptain && p.Status !== 'Sold')
+    ? roster.filter(p => p.IsCaptain)
+    : roster.filter(p => !p.IsCaptain)
 
-  const unsoldPlayers = phaseRoster.filter(p => p.Status === 'Unsold')
+  const activePlayers = phaseRoster.filter(p => p.Status !== 'Sold')
+
+  const unsoldPlayers = activePlayers.filter(p => p.Status === 'Unsold')
   const soldCount = phaseRoster.filter(p => p.Status === 'Sold').length
-  const currentPlayer = phaseRoster.find(p => p.KekaID === currentPlayerKekaID) || phaseRoster[0] || null
-  const displayIndex = phaseRoster.findIndex(p => p.KekaID === currentPlayerKekaID)
+  const currentPlayer = activePlayers.find(p => p.KekaID === currentPlayerKekaID) || activePlayers[0] || null
+  const displayIndex = activePlayers.findIndex(p => p.KekaID === currentPlayerKekaID)
 
   useEffect(() => {
-    if (phaseRoster.length === 0) {
+    if (activePlayers.length === 0) {
       if (currentPlayerKekaID !== null) {
         setCurrentPlayerKekaID(null)
       }
       return
     }
 
-    if (!phaseRoster.some(player => player.KekaID === currentPlayerKekaID)) {
-      setCurrentPlayerKekaID(phaseRoster[0].KekaID)
+    if (!activePlayers.some(player => player.KekaID === currentPlayerKekaID)) {
+      setCurrentPlayerKekaID(activePlayers[0].KekaID)
     }
-  }, [phaseRoster, currentPlayerKekaID])
+  }, [activePlayers, currentPlayerKekaID])
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -413,7 +437,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     }
   }
 
-  const progress = Math.round((soldCount / phaseRoster.length) * 100)
+  const progress = phaseRoster.length > 0 ? Math.round((soldCount / phaseRoster.length) * 100) : 100
 
   if (!currentPlayer) {
     return (
@@ -447,7 +471,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
-              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {(displayIndex >= 0 ? displayIndex : 0) + 1} of {phaseRoster.length}
+              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {(displayIndex >= 0 ? displayIndex : 0) + 1} of {activePlayers.length}
             </span>
             <span style={{ color: 'var(--green)', fontSize: '0.8rem', fontWeight: 600 }}>
               {soldCount} Sold · {unsoldPlayers.length} Remaining
@@ -753,17 +777,17 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           </div>
         )}
 
-        {storageWarning && (
+        {storageWarning.message && (
           <div style={{
             marginBottom: '10px',
             padding: '8px 10px',
             borderRadius: '8px',
-            border: '1px solid rgba(255,61,61,0.3)',
-            background: 'rgba(255,61,61,0.1)',
-            color: 'var(--red)',
+            border: storageWarning.persistent ? '1px solid rgba(255,61,61,0.3)' : '1px solid rgba(255,214,0,0.3)',
+            background: storageWarning.persistent ? 'rgba(255,61,61,0.1)' : 'rgba(255,214,0,0.1)',
+            color: storageWarning.persistent ? 'var(--red)' : 'var(--gold)',
             fontSize: '0.75rem'
           }}>
-            {storageWarning}
+            {storageWarning.message}
           </div>
         )}
 
