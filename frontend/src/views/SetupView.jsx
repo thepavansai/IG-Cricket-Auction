@@ -11,7 +11,7 @@ const SKILL_LEVEL_PRICES = {
 }
 
 // ─── Captain Base Price Enum ─────────────────────────────────────────────
-const CAPTAIN_BASE_PRICE = 8 // All captains have same base price (8 Lakhs)
+const CAPTAIN_BASE_PRICE = 10 // All captains have same base price (10 Lakhs)
 
 const getBasePriceFromSkillLevel = (skillLevel) => {
   if (!skillLevel) return SKILL_LEVEL_PRICES.BEGINNER
