@@ -36,7 +36,7 @@ const readBidSnapshots = () => {
 
 export default function AuctionView({ masterRoster, config, onDone, isReauction }) {
   const savedDraft = readDraft()
-  const savedBidSnapshots = readBidSnapshots()
+  const savedBidSnapshots = isReauction ? [] : readBidSnapshots()
   
   // Separate captains and regular players
   const captains = masterRoster.filter(p => p.IsCaptain)
@@ -49,12 +49,16 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   
   const [roster, setRoster] = useState((!isReauction && savedDraft?.roster) ? savedDraft.roster : initialRoster)
   const [currentPlayerKekaID, setCurrentPlayerKekaID] = useState(
-    savedDraft?.currentPlayerKekaID || initialRoster[savedDraft?.currentIndex || 0]?.KekaID || initialRoster[0]?.KekaID || null
+    (!isReauction && (savedDraft?.currentPlayerKekaID || initialRoster[savedDraft?.currentIndex || 0]?.KekaID))
+      || initialRoster[0]?.KekaID
+      || null
   )
-  const [auctionPhase, setAuctionPhase] = useState(savedDraft?.auctionPhase || 'captain') // 'captain' or 'player'
+  const [auctionPhase, setAuctionPhase] = useState(
+    isReauction ? 'player' : (savedDraft?.auctionPhase || 'captain')
+  ) // 'captain' or 'player'
   const [teams, setTeams] = useState([])
-  const [selectedTeam, setSelectedTeam] = useState(savedDraft?.selectedTeam || '')
-  const [bidAmount, setBidAmount] = useState(savedDraft?.bidAmount || '')
+  const [selectedTeam, setSelectedTeam] = useState(isReauction ? '' : (savedDraft?.selectedTeam || ''))
+  const [bidAmount, setBidAmount] = useState(isReauction ? '' : (savedDraft?.bidAmount || ''))
   const [bidSnapshots, setBidSnapshots] = useState(Array.isArray(savedBidSnapshots) ? savedBidSnapshots : [])
   const [bidStatus, setBidStatus] = useState(null)
   const [bidMsg, setBidMsg] = useState('')
@@ -285,15 +289,28 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       player.WinningTeam === teamName
     )
 
-  const handleSell = async () => {
+  const handleSell = async (options = {}) => {
+    const forceSell = Boolean(options.forceSell)
+
     if (!selectedTeam) { setBidMsg('Select a team'); setBidStatus('error'); return }
-    const amount = parseInt(bidAmount)
-    if (!amount || amount < currentPlayer.BasePrice) {
+    const parsedBid = parseInt(bidAmount, 10)
+    const amount = Number.isFinite(parsedBid) && parsedBid > 0
+      ? parsedBid
+      : (forceSell ? currentPlayer.BasePrice : NaN)
+
+    if (!currentPlayer) return
+
+    if (!amount || amount <= 0) {
+      setBidMsg('Enter a valid bid amount')
+      setBidStatus('error')
+      return
+    }
+
+    if (!forceSell && amount < currentPlayer.BasePrice) {
       setBidMsg(`Minimum bid is ${formatInLakhs(currentPlayer.BasePrice)}`)
       setBidStatus('error')
       return
     }
-    if (!currentPlayer) return
 
     const team = teams.find(t => t.id === selectedTeam)
     if (auctionPhase === 'captain' && teamHasCaptain(team?.name || selectedTeam)) {
@@ -302,7 +319,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       return
     }
 
-    if (team && amount > team.budget) {
+    if (!forceSell && team && amount > team.budget) {
       setBidMsg(`${team.name} only has ${formatInLakhs(team.budget)} left`)
       setBidStatus('error')
       return
@@ -326,7 +343,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       await axios.post(`${API}/api/bid`, {
         teamId: selectedTeam,
         kekaId: currentPlayer.KekaID,
-        amount
+        amount,
+        ignoreBudget: forceSell
       })
 
       pushBidSnapshot(previousState)
@@ -345,7 +363,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       })
       setRoster(updatedRoster)
       setBidStatus('success')
-      setBidMsg(`Sold to ${team?.name} for ${formatInLakhs(amount)}!`)
+      setBidMsg(`${forceSell ? 'Force sold' : 'Sold'} to ${team?.name} for ${formatInLakhs(amount)}!`)
       await fetchTeams()
 
       setTimeout(() => advancePlayer(updatedRoster), 1200)
@@ -454,6 +472,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   }
 
   const photoUrl = getPhotoUrl(currentPlayer)
+  const playerByKekaID = new Map(masterRoster.map(player => [player.KekaID, player]))
 
   return (
     <div style={{
@@ -491,7 +510,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         </div>
 
         <div key={currentPlayerKekaID || 'no-player'} className="pop" style={{
-          background: 'var(--card)',
+          background: 'var(--grad-card)',
           border: '1px solid var(--border)',
           borderRadius: '16px',
           overflow: 'hidden',
@@ -587,6 +606,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
                 WINNING TEAM
               </label>
               <select
+                className="themed-control"
                 value={selectedTeam}
                 onChange={e => setSelectedTeam(e.target.value)}
                 style={{
@@ -614,6 +634,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
                 BID AMOUNT (L)
               </label>
               <input
+                className="themed-control"
                 type="number"
                 value={bidAmount}
                 onChange={e => setBidAmount(e.target.value)}
@@ -663,7 +684,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={handleSell}
+              onClick={() => handleSell()}
               disabled={bidStatus === 'loading' || bidStatus === 'success'}
               style={{
                 ...btnStyle('var(--green)', '#000'),
@@ -687,6 +708,21 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
               <SkipForward size={16} />
               SKIP
             </button>
+            {isReauction && (
+              <button
+                onClick={() => handleSell({ forceSell: true })}
+                disabled={bidStatus === 'loading' || bidStatus === 'success'}
+                style={{
+                  ...btnStyle('var(--gold)', '#111'),
+                  flex: 1.25,
+                  opacity: (bidStatus === 'loading' || bidStatus === 'success') ? 0.6 : 1
+                }}
+                title="Force sell allows selling below base price in re-auction"
+              >
+                <Gavel size={16} />
+                FORCE SELL
+              </button>
+            )}
           </div>
 
           <button
@@ -800,7 +836,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
                 key={team.id}
                 onClick={() => setSelectedTeam(team.id)}
                 style={{
-                  background: selectedTeam === team.id ? 'var(--bg3)' : 'var(--card)',
+                  background: selectedTeam === team.id ? 'var(--grad-selected-card)' : 'var(--card)',
                   border: `1px solid ${selectedTeam === team.id ? 'var(--green)' : 'var(--border)'}`,
                   borderRadius: '10px',
                   padding: '12px 14px',
@@ -846,26 +882,24 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
                     marginTop: '8px',
                     display: 'flex', flexWrap: 'wrap', gap: '4px'
                   }}>
-                    {team.roster.slice(-6).map(kid => (
-                      <span key={kid} style={{
-                        background: 'var(--bg)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '0.65rem',
-                        color: 'var(--muted)',
-                        border: '1px solid var(--border)'
-                      }}>
-                        {kid}
-                      </span>
-                    ))}
-                    {team.roster.length > 6 && (
-                      <span style={{
-                        fontSize: '0.65rem', color: 'var(--muted)',
-                        alignSelf: 'center', paddingLeft: '2px'
-                      }}>
-                        +{team.roster.length - 6} more
-                      </span>
-                    )}
+                    {(() => {
+                      const captainId = team.roster.find(kid => playerByKekaID.get(kid)?.IsCaptain)
+                      const captain = captainId ? playerByKekaID.get(captainId) : null
+                      if (!captain) return null
+
+                      return (
+                        <span style={{
+                          background: 'var(--bg)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.65rem',
+                          color: 'var(--gold)',
+                          border: '1px solid rgba(255,214,0,0.3)'
+                        }}>
+                          {captain.Name}
+                        </span>
+                      )
+                    })()}
                   </div>
                 )}
               </div>

@@ -225,7 +225,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen" style={{ background: 'var(--grad-bg)' }}>
       <header style={{
         background: 'var(--bg2)',
         borderBottom: '1px solid var(--border)',
@@ -239,11 +239,12 @@ export default function App() {
         zIndex: 100
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: '22px', flexShrink: 0, marginTop: '1px' }}>
           <svg
             viewBox="0 0 161 37"
-            aria-label="Cricket auction logo"
+            aria-label="InsightGlobal logo"
             role="img"
-            style={{ display: 'block', height: '1.5rem', width: 'auto', color: 'var(--text)', flexShrink: 0 }}
+            style={{ display: 'block', height: '22px', width: 'auto', color: 'var(--text)' }}
           >
             <path d="M3.04763 0.323469H0.0722656V20.6155H3.04763V0.323469Z" fill="currentColor"></path>
             <path d="M12.878 6.72385C11.4806 6.69149 10.1169 7.155 9.02869 8.03219V6.95117H6.03817V20.5903H9.01353L9.03879 12.6645C9.11816 11.7897 9.52816 10.9782 10.1852 10.3953C10.8423 9.81235 11.6969 9.50199 12.5749 9.52745H12.6052C13.0216 9.51385 13.4366 9.58323 13.826 9.73153C14.2154 9.87982 14.5714 10.1041 14.8733 10.3913C15.2362 10.7874 15.5165 11.2518 15.6978 11.7575C15.879 12.2632 15.9577 12.7999 15.9291 13.3363V20.5903H18.9045V13.109C18.8994 9.29509 16.4797 6.72385 12.878 6.72385Z" fill="currentColor"></path>
@@ -260,12 +261,16 @@ export default function App() {
             <path d="M45.5969 20.8582C49.4971 20.8582 52.6589 17.6964 52.6589 13.7962C52.6589 9.89589 49.4971 6.7341 45.5969 6.7341C41.6966 6.7341 38.5348 9.89589 38.5348 13.7962C38.5348 17.6964 41.6966 20.8582 45.5969 20.8582Z" fill="#FFD700"></path>
             <path d="M115.591 20.8582C119.491 20.8582 122.653 17.6964 122.653 13.7962C122.653 9.89589 119.491 6.7341 115.591 6.7341C111.691 6.7341 108.529 9.89589 108.529 13.7962C108.529 17.6964 111.691 20.8582 115.591 20.8582Z" fill="#00D6F2"></path>
           </svg>
-          <span style={{
-            fontFamily: 'Bebas Neue',
-            fontSize: '1.5rem',
-            letterSpacing: '0.1em',
-            color: 'var(--green)'
-          }}>CRICKET AUCTION</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{
+              fontFamily: 'Bebas Neue',
+              fontSize: '1.5rem',
+              lineHeight: '22px',
+              letterSpacing: '0.1em',
+              color: 'var(--green)'
+            }}>CRICKET AUCTION</span>
+          </div>
           <span style={{
             fontSize: '0.65rem',
             background: 'var(--bg3)',

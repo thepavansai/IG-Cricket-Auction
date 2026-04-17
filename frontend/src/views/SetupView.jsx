@@ -248,6 +248,7 @@ export default function SetupView({ onComplete }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <Field icon={<FolderOpen size={16} />} label="Image Directory Path" hint="Full local path to player photos folder">
           <input
+            className="themed-control"
             type="text"
             value={imagePath}
             onChange={e => setImagePath(e.target.value)}
@@ -258,6 +259,7 @@ export default function SetupView({ onComplete }) {
 
         <Field icon={<Users size={16} />} label="Tournament Teams" hint="Comma-separated team names">
           <input
+            className="themed-control"
             type="text"
             value={teamsInput}
             onChange={e => setTeamsInput(e.target.value)}
@@ -268,6 +270,7 @@ export default function SetupView({ onComplete }) {
 
         <Field icon={<DollarSign size={16} />} label="Starting Purse per Team" hint="Use lakhs (100 = 1 Cr)">
           <input
+            className="themed-control"
             type="number"
             value={basePurse}
             onChange={e => setBasePurse(e.target.value)}
@@ -334,6 +337,7 @@ export default function SetupView({ onComplete }) {
 
         <Field icon={<Users size={16} />} label="Captain Keka IDs" hint="Comma- or newline-separated IDs from backend">
           <textarea
+            className="themed-control"
             value={captainKekaIdsInput}
             onChange={e => setCaptainKekaIdsInput(e.target.value)}
             placeholder="IG0227, IG0310, IG0441"
@@ -343,6 +347,7 @@ export default function SetupView({ onComplete }) {
 
         <Field icon={<Users size={16} />} label="Captain Names" hint="Optional fallback if IDs are not available">
           <textarea
+            className="themed-control"
             value={captainNamesInput}
             onChange={e => setCaptainNamesInput(e.target.value)}
             placeholder="Rahul Sharma, Arjun Patel, Vikram Singh"

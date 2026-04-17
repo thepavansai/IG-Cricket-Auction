@@ -3,33 +3,43 @@
 @tailwind utilities;
 
 :root {
-  --green: #00c853;
-  --green-dim: #00963e;
-  --gold: #ffd600;
-  --gold-dim: #c9a800;
-  --red: #ff3d3d;
-  --bg: #0a0f0d;
-  --bg2: #111a14;
-  --bg3: #162019;
-  --card: #1a2a1e;
-  --border: #2a3f2e;
-  --text: #e8f5e9;
-  --muted: #7a9c7e;
+  color-scheme: dark;
+  --green: #22c55e;
+  --green-dim: #15803d;
+  --gold: #f59e0b;
+  --gold-dim: #b45309;
+  --red: #ef4444;
+  --bg: #0f1115;
+  --bg2: #151922;
+  --bg3: #1e2532;
+  --card: #222c3b;
+  --border: #334155;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --grad-bg: radial-gradient(120% 120% at 10% 0%, #192131 0%, var(--bg) 48%, #0c1018 100%);
+  --grad-card: linear-gradient(140deg, #2a3648 0%, #222c3b 60%, #1f2836 100%);
+  --grad-selected-card: linear-gradient(140deg, rgba(34, 197, 94, 0.18) 0%, rgba(34, 197, 94, 0.08) 100%);
+  --grad-gold: linear-gradient(140deg, rgba(245, 158, 11, 0.22) 0%, rgba(180, 83, 9, 0.08) 100%);
 }
 
 [data-theme="light"] {
-  --green: #00a84d;
-  --green-dim: #0d7a38;
-  --gold: #cc8a00;
-  --gold-dim: #994d00;
-  --red: #d32f2f;
+  color-scheme: light;
+  --green: #15803d;
+  --green-dim: #166534;
+  --gold: #b45309;
+  --gold-dim: #92400e;
+  --red: #dc2626;
   --bg: #ffffff;
-  --bg2: #f5f5f5;
-  --bg3: #eeeeee;
+  --bg2: #f5f7fa;
+  --bg3: #e9edf3;
   --card: #fafafa;
-  --border: #e0e0e0;
-  --text: #1a1a1a;
-  --muted: #666666;
+  --border: #d1d9e6;
+  --text: #111827;
+  --muted: #6b7280;
+  --grad-bg: radial-gradient(130% 120% at 12% 0%, #f2f6fc 0%, var(--bg) 58%, #eef3fb 100%);
+  --grad-card: linear-gradient(140deg, #ffffff 0%, #f7f9fd 60%, #f2f6fb 100%);
+  --grad-selected-card: linear-gradient(140deg, rgba(21, 128, 61, 0.14) 0%, rgba(21, 128, 61, 0.05) 100%);
+  --grad-gold: linear-gradient(140deg, rgba(180, 83, 9, 0.14) 0%, rgba(146, 64, 14, 0.05) 100%);
 }
 
 * { box-sizing: border-box; }
@@ -37,10 +47,17 @@
 body {
   margin: 0;
   font-family: 'DM Sans', sans-serif;
-  background: var(--bg);
+  background: var(--grad-bg);
   color: var(--text);
   min-height: 100vh;
   transition: background-color 0.3s, color 0.3s;
+}
+
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.25s;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 h1, h2, h3, .display {
@@ -93,4 +110,45 @@ h1, h2, h3, .display {
 .theme-toggle:hover {
   background: var(--bg3);
   border-color: var(--text);
+}
+
+/* Shared themed controls for consistent input/select/textarea look in both modes */
+.themed-control {
+  color-scheme: inherit;
+  color: var(--text);
+  caret-color: var(--text);
+}
+
+.themed-control::placeholder {
+  color: var(--muted);
+  opacity: 0.9;
+}
+
+.themed-control:focus {
+  border-color: var(--green) !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.14);
+}
+
+.themed-control option {
+  background: var(--bg2);
+  color: var(--text);
+}
+
+input.themed-control:-webkit-autofill,
+input.themed-control:-webkit-autofill:hover,
+input.themed-control:-webkit-autofill:focus,
+textarea.themed-control:-webkit-autofill,
+select.themed-control:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  box-shadow: 0 0 0 1000px var(--bg2) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+input[type="number"].themed-control {
+  appearance: textfield;
+}
+
+input[type="number"].themed-control::-webkit-outer-spin-button,
+input[type="number"].themed-control::-webkit-inner-spin-button {
+  margin: 0;
 }

@@ -30,9 +30,10 @@ type SetConfigRequest struct {
 }
 
 type BidRequest struct {
-	TeamID string `json:"teamId"`
-	KekaID string `json:"kekaId"`
-	Amount int64  `json:"amount"`
+	TeamID       string `json:"teamId"`
+	KekaID       string `json:"kekaId"`
+	Amount       int64  `json:"amount"`
+	IgnoreBudget bool   `json:"ignoreBudget"`
 }
 
 type BidHistoryEntry struct {
@@ -138,7 +139,7 @@ func bidHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if team.Budget < req.Amount {
+	if !req.IgnoreBudget && team.Budget < req.Amount {
 		http.Error(w, "Insufficient budget", http.StatusForbidden)
 		return
 	}
@@ -151,7 +152,7 @@ func bidHandler(w http.ResponseWriter, r *http.Request) {
 		Amount: req.Amount,
 	})
 
-	log.Printf("BID: Team %s bought %s for %d. Remaining: %d", team.Name, req.KekaID, req.Amount, team.Budget)
+	log.Printf("BID: Team %s bought %s for %d. Remaining: %d (ignoreBudget=%v)", team.Name, req.KekaID, req.Amount, team.Budget, req.IgnoreBudget)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
