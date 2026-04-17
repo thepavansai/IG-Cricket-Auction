@@ -28,7 +28,7 @@ export default function App() {
   const [view, setView] = useState(savedSession?.view || 'setup')
   const [masterRoster, setMasterRoster] = useState(savedSession?.masterRoster || [])
   const [config, setConfig] = useState(savedSession?.config || null)
-  const [theme, setTheme] = useState(() => savedSession?.theme || localStorage.getItem('theme') || 'dark')
+  const [theme, setTheme] = useState(() => savedSession?.theme || localStorage.getItem('theme') || 'light')
   const [toast, setToast] = useState({ visible: false, message: '' })
   const [refreshStep, setRefreshStep] = useState(0)
   const [clearConfirm, setClearConfirm] = useState(false)
@@ -169,7 +169,7 @@ export default function App() {
     setView('setup')
     setMasterRoster([])
     setConfig(null)
-    setTheme('dark')
+    setTheme('light')
     setClearConfirm(false)
     showToast('Saved data cleared.')
   }
@@ -239,7 +239,7 @@ export default function App() {
         zIndex: 100
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', height: '22px', flexShrink: 0, marginTop: '1px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: '22px', flexShrink: 0, transform: 'translateY(1px)' }}>
           <svg
             viewBox="0 0 161 37"
             aria-label="InsightGlobal logo"
@@ -262,16 +262,18 @@ export default function App() {
             <path d="M115.591 20.8582C119.491 20.8582 122.653 17.6964 122.653 13.7962C122.653 9.89589 119.491 6.7341 115.591 6.7341C111.691 6.7341 108.529 9.89589 108.529 13.7962C108.529 17.6964 111.691 20.8582 115.591 20.8582Z" fill="#00D6F2"></path>
           </svg>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: '22px' }}>
             <span style={{
               fontFamily: 'Bebas Neue',
               fontSize: '1.5rem',
-              lineHeight: '22px',
+              lineHeight: 1,
               letterSpacing: '0.1em',
               color: 'var(--green)'
             }}>CRICKET AUCTION</span>
           </div>
           <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
             fontSize: '0.65rem',
             background: 'var(--bg3)',
             border: '1px solid var(--border)',
