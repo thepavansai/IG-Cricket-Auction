@@ -52,6 +52,24 @@ export default function App() {
     }
   }
 
+  const safeSetItem = (key, value) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch (e) {
+      if (e?.name === 'QuotaExceededError') {
+        localStorage.removeItem('cricket-auction-bid-snapshots')
+        try {
+          localStorage.setItem(key, value)
+        } catch {
+          showToast(
+            'Storage full — bid history cleared. Auction state is safe.',
+            { persistent: true }
+          )
+        }
+      }
+    }
+  }
+
   useEffect(() => {
     if (refreshStep === 0) return
 
@@ -65,14 +83,14 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
+    safeSetItem('theme', theme)
   }, [theme])
 
   useEffect(() => {
     const nextSession = { view, masterRoster, config, theme }
 
     lastSessionRef.current = nextSession
-    localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession))
+    safeSetItem(SESSION_KEY, JSON.stringify(nextSession))
   }, [view, masterRoster, config, theme])
 
   useEffect(() => {

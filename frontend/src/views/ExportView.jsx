@@ -16,9 +16,10 @@ export default function ExportView({ masterRoster, onRestart, onReauction }) {
 
   const soldPlayers = masterRoster.filter(p => p.Status === 'Sold')
   const unsoldPlayers = masterRoster.filter(p => p.Status !== 'Sold')
-  
-  const soldCaptains = soldPlayers.filter(p => p.IsCaptain)
-  const unsoldCaptains = unsoldPlayers.filter(p => p.IsCaptain)
+
+  const originalCaptains = masterRoster.filter(p => p.WasOriginalCaptain)
+  const soldCaptains = originalCaptains.filter(p => p.Status === 'Sold')
+  const unsoldCaptains = originalCaptains.filter(p => p.Status !== 'Sold')
   const soldRegularPlayers = soldPlayers.filter(p => !p.IsCaptain)
   
   const round1Players = soldPlayers.filter(p => (p.Round || 1) === 1)

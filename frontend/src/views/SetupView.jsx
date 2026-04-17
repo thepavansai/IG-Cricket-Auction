@@ -196,22 +196,19 @@ export default function SetupView({ onComplete }) {
     const captainNameSet = new Set(captainNames.map(normalizeText))
     
     // Mark captains in roster and set their base price
-    const rosterWithCaptains = parsedRoster.map(player => ({
-      ...player,
-      IsCaptain:
-        captainKekaIdSet.has(normalizeText(player.KekaID)) ||
-        captainNameSet.has(normalizeText(player.Name)),
-      SkillLevel:
+    const rosterWithCaptains = parsedRoster.map(player => {
+      const isCaptain =
         captainKekaIdSet.has(normalizeText(player.KekaID)) ||
         captainNameSet.has(normalizeText(player.Name))
-          ? 'Captain'
-          : player.SkillLevel,
-      BasePrice:
-        captainKekaIdSet.has(normalizeText(player.KekaID)) ||
-        captainNameSet.has(normalizeText(player.Name))
-          ? CAPTAIN_BASE_PRICE
-          : player.BasePrice
-    }))
+
+      return {
+        ...player,
+        IsCaptain: isCaptain,
+        WasOriginalCaptain: isCaptain,
+        SkillLevel: isCaptain ? 'Captain' : player.SkillLevel,
+        BasePrice: isCaptain ? CAPTAIN_BASE_PRICE : player.BasePrice
+      }
+    })
 
     try {
       await axios.post('http://localhost:8080/api/set-config', {

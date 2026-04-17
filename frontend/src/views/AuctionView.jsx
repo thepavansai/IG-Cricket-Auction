@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import {
   ChevronRight, SkipForward, Gavel, Users,
@@ -47,8 +47,10 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     ? masterRoster.filter(p => p.Status === 'Unsold')
     : masterRoster
   
-  const [roster, setRoster] = useState(savedDraft?.roster || initialRoster)
-  const [currentIndex, setCurrentIndex] = useState(savedDraft?.currentIndex || 0)
+  const [roster, setRoster] = useState((!isReauction && savedDraft?.roster) ? savedDraft.roster : initialRoster)
+  const [currentPlayerKekaID, setCurrentPlayerKekaID] = useState(
+    savedDraft?.currentPlayerKekaID || initialRoster[savedDraft?.currentIndex || 0]?.KekaID || initialRoster[0]?.KekaID || null
+  )
   const [auctionPhase, setAuctionPhase] = useState(savedDraft?.auctionPhase || 'captain') // 'captain' or 'player'
   const [teams, setTeams] = useState([])
   const [selectedTeam, setSelectedTeam] = useState(savedDraft?.selectedTeam || '')
@@ -57,11 +59,39 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const [bidStatus, setBidStatus] = useState(null)
   const [bidMsg, setBidMsg] = useState('')
   const [imgError, setImgError] = useState(false)
+  const [storageWarning, setStorageWarning] = useState('')
+  const [connectionStatus, setConnectionStatus] = useState('ok')
+  const failCountRef = useRef(0)
+
+  const showToast = (message, options = {}) => {
+    if (options.persistent) {
+      setStorageWarning(message)
+    }
+  }
+
+  const safeSetItem = (key, value) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch (e) {
+      if (e?.name === 'QuotaExceededError') {
+        localStorage.removeItem('cricket-auction-bid-snapshots')
+        setBidSnapshots([])
+        try {
+          localStorage.setItem(key, value)
+        } catch {
+          showToast(
+            'Storage full — bid history cleared. Auction state is safe.',
+            { persistent: true }
+          )
+        }
+      }
+    }
+  }
 
   const persistAuctionState = (nextState) => {
-    localStorage.setItem(AUCTION_DRAFT_KEY, JSON.stringify({
+    safeSetItem(AUCTION_DRAFT_KEY, JSON.stringify({
       roster: nextState.roster,
-      currentIndex: nextState.currentIndex,
+      currentPlayerKekaID: nextState.currentPlayerKekaID,
       selectedTeam: nextState.selectedTeam,
       bidAmount: nextState.bidAmount,
       auctionPhase: nextState.auctionPhase,
@@ -72,14 +102,14 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   useEffect(() => {
     persistAuctionState({
       roster,
-      currentIndex,
+      currentPlayerKekaID,
       selectedTeam,
       bidAmount,
       auctionPhase,
       savedAt: Date.now()
     })
-    localStorage.setItem(BIDS_KEY, JSON.stringify(bidSnapshots.slice(0, 20)))
-  }, [roster, currentIndex, selectedTeam, bidAmount, auctionPhase, bidSnapshots])
+    safeSetItem(BIDS_KEY, JSON.stringify(bidSnapshots.slice(0, 20)))
+  }, [roster, currentPlayerKekaID, selectedTeam, bidAmount, auctionPhase, bidSnapshots])
 
   // Filter roster based on current phase
   const phaseRoster = auctionPhase === 'captain'
@@ -88,16 +118,38 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
   const unsoldPlayers = phaseRoster.filter(p => p.Status === 'Unsold')
   const soldCount = phaseRoster.filter(p => p.Status === 'Sold').length
-  const currentPlayer = phaseRoster[currentIndex] || null
+  const currentPlayer = phaseRoster.find(p => p.KekaID === currentPlayerKekaID) || phaseRoster[0] || null
+  const displayIndex = phaseRoster.findIndex(p => p.KekaID === currentPlayerKekaID)
+
+  useEffect(() => {
+    if (phaseRoster.length === 0) {
+      if (currentPlayerKekaID !== null) {
+        setCurrentPlayerKekaID(null)
+      }
+      return
+    }
+
+    if (!phaseRoster.some(player => player.KekaID === currentPlayerKekaID)) {
+      setCurrentPlayerKekaID(phaseRoster[0].KekaID)
+    }
+  }, [phaseRoster, currentPlayerKekaID])
 
   const fetchTeams = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/teams`)
+      failCountRef.current = 0
+      setConnectionStatus('ok')
       setTeams(res.data)
       if (!selectedTeam && res.data.length > 0) {
         setSelectedTeam(res.data[0].id)
       }
     } catch {
+      failCountRef.current += 1
+      if (failCountRef.current >= 3) {
+        setConnectionStatus('lost')
+      } else {
+        setConnectionStatus('retrying')
+      }
     }
   }, [selectedTeam])
 
@@ -133,7 +185,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     setBidStatus(null)
     setBidMsg('')
     setBidAmount('')
-  }, [currentIndex])
+  }, [currentPlayerKekaID])
 
   const pushBidSnapshot = (snapshot) => {
     setBidSnapshots(currentSnapshots => [snapshot, ...currentSnapshots].slice(0, 20))
@@ -152,8 +204,23 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     try {
       await axios.post(`${API}/api/reverse-bid`)
 
-      setRoster(previous.roster)
-      setCurrentIndex(previous.currentIndex)
+      const restoredRoster = roster.map(player =>
+        player.KekaID === previous.changedPlayerKekaID
+          ? {
+              ...player,
+              Status: previous.previousPlayerState.Status,
+              WinningTeam: previous.previousPlayerState.WinningTeam,
+              WinningBid: previous.previousPlayerState.WinningBid,
+              Round: previous.previousPlayerState.Round
+            }
+          : player
+      )
+      const restoredPhaseRoster = auctionPhase === 'captain'
+        ? restoredRoster.filter(player => player.IsCaptain && player.Status !== 'Sold')
+        : restoredRoster.filter(player => !player.IsCaptain && player.Status !== 'Sold')
+
+      setRoster(restoredRoster)
+      setCurrentPlayerKekaID(previous.currentPlayerKekaID || restoredPhaseRoster[0]?.KekaID || null)
       setSelectedTeam(previous.selectedTeam)
       setBidAmount(previous.bidAmount)
       setBidSnapshots(currentSnapshots => currentSnapshots.slice(1))
@@ -197,7 +264,11 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const handleSell = async () => {
     if (!selectedTeam) { setBidMsg('Select a team'); setBidStatus('error'); return }
     const amount = parseInt(bidAmount)
-    if (!amount || amount < 1) { setBidMsg('Enter a valid bid amount'); setBidStatus('error'); return }
+    if (!amount || amount < currentPlayer.BasePrice) {
+      setBidMsg(`Minimum bid is ${formatInLakhs(currentPlayer.BasePrice)}`)
+      setBidStatus('error')
+      return
+    }
     if (!currentPlayer) return
 
     const team = teams.find(t => t.id === selectedTeam)
@@ -216,8 +287,14 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     setBidStatus('loading')
     try {
       const previousState = {
-        roster,
-        currentIndex,
+        changedPlayerKekaID: currentPlayer.KekaID,
+        previousPlayerState: {
+          Status: currentPlayer.Status,
+          WinningTeam: currentPlayer.WinningTeam,
+          WinningBid: currentPlayer.WinningBid,
+          Round: currentPlayer.Round
+        },
+        currentPlayerKekaID: currentPlayer.KekaID,
         selectedTeam,
         bidAmount,
         playerName: currentPlayer.Name || 'Unknown Player'
@@ -270,7 +347,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       ? updatedRoster.filter(p => p.IsCaptain && p.Status !== 'Sold')
       : updatedRoster.filter(p => !p.IsCaptain && p.Status !== 'Sold')
 
-    let next = currentIndex + 1
+    const currentPosition = nextPhaseRoster.findIndex(player => player.KekaID === currentPlayerKekaID)
+    let next = currentPosition >= 0 ? currentPosition + 1 : 0
     while (next < nextPhaseRoster.length && nextPhaseRoster[next].Status === 'Sold') {
       next++
     }
@@ -279,7 +357,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       if (auctionPhase === 'captain') {
         if (!allTeamsHaveCaptain(updatedRoster)) {
           setRoster(updatedRoster)
-          setCurrentIndex(0)
+          setCurrentPlayerKekaID(nextPhaseRoster[0]?.KekaID || null)
           setSelectedTeam('')
           setBidAmount('')
           setBidStatus('skip')
@@ -301,7 +379,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
         setRoster(rosterAfterCaptains)
         setAuctionPhase('player')
-        setCurrentIndex(0)
+        const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold')
+        setCurrentPlayerKekaID(firstPlayer?.KekaID || null)
         setSelectedTeam('')
         setBidAmount('')
       } else {
@@ -323,13 +402,14 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
         setRoster(rosterAfterCaptains)
         setAuctionPhase('player')
-        setCurrentIndex(0)
+        const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold')
+        setCurrentPlayerKekaID(firstPlayer?.KekaID || null)
         setSelectedTeam('')
         setBidAmount('')
         return
       }
 
-      setCurrentIndex(next)
+      setCurrentPlayerKekaID(nextPhaseRoster[next]?.KekaID || null)
     }
   }
 
@@ -367,7 +447,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
-              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {currentIndex + 1} of {phaseRoster.length}
+              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {(displayIndex >= 0 ? displayIndex : 0) + 1} of {phaseRoster.length}
             </span>
             <span style={{ color: 'var(--green)', fontSize: '0.8rem', fontWeight: 600 }}>
               {soldCount} Sold · {unsoldPlayers.length} Remaining
@@ -386,7 +466,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           </div>
         </div>
 
-        <div key={currentIndex} className="pop" style={{
+        <div key={currentPlayerKekaID || 'no-player'} className="pop" style={{
           background: 'var(--card)',
           border: '1px solid var(--border)',
           borderRadius: '16px',
@@ -619,17 +699,73 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           }}>
             <Users size={16} /> TEAMS
           </h3>
-          <button
-            onClick={fetchTeams}
-            style={{
-              background: 'none', border: 'none',
-              color: 'var(--muted)', cursor: 'pointer', padding: '4px'
-            }}
-            title="Refresh"
-          >
-            <RefreshCw size={14} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {connectionStatus === 'ok' && (
+              <span
+                title="Backend connected"
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  display: 'inline-block',
+                  background: 'var(--green)'
+                }}
+              />
+            )}
+            {connectionStatus === 'retrying' && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--gold)', fontSize: '0.72rem' }}>
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    display: 'inline-block',
+                    background: 'var(--gold)'
+                  }}
+                />
+                Reconnecting...
+              </span>
+            )}
+            <button
+              onClick={fetchTeams}
+              style={{
+                background: 'none', border: 'none',
+                color: 'var(--muted)', cursor: 'pointer', padding: '4px'
+              }}
+              title="Refresh"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
         </div>
+
+        {connectionStatus === 'lost' && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            border: '1px solid rgba(255,61,61,0.3)',
+            background: 'rgba(255,61,61,0.1)',
+            color: 'var(--red)',
+            fontSize: '0.75rem'
+          }}>
+            Backend lost — budgets may be stale
+          </div>
+        )}
+
+        {storageWarning && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            border: '1px solid rgba(255,61,61,0.3)',
+            background: 'rgba(255,61,61,0.1)',
+            color: 'var(--red)',
+            fontSize: '0.75rem'
+          }}>
+            {storageWarning}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {teams.map(team => {
