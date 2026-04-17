@@ -3,6 +3,28 @@ import * as XLSX from 'xlsx'
 import axios from 'axios'
 import { Upload, FolderOpen, Users, DollarSign, CheckCircle, AlertCircle } from 'lucide-react'
 
+// ─── Skill Level to Base Price Enum ───────────────────────────────────────
+const SKILL_LEVEL_PRICES = {
+  BEGINNER: 2,
+  INTERMEDIATE: 4,
+  ADVANCED: 6
+}
+
+// ─── Captain Base Price Enum ─────────────────────────────────────────────
+const CAPTAIN_BASE_PRICE = 8 // All captains have same base price (8 Lakhs)
+
+const getBasePriceFromSkillLevel = (skillLevel) => {
+  if (!skillLevel) return SKILL_LEVEL_PRICES.BEGINNER
+  
+  const normalized = skillLevel.toLowerCase().trim()
+  
+  if (normalized.includes('beginner')) return SKILL_LEVEL_PRICES.BEGINNER
+  if (normalized.includes('intermediate')) return SKILL_LEVEL_PRICES.INTERMEDIATE
+  if (normalized.includes('advanced')) return SKILL_LEVEL_PRICES.ADVANCED
+  
+  return SKILL_LEVEL_PRICES.BEGINNER // default
+}
+
 export default function SetupView({ onComplete }) {
   const setupDraftKey = 'cricket-auction-setup-draft'
   const savedSetupDraft = (() => {
@@ -19,6 +41,8 @@ export default function SetupView({ onComplete }) {
   const [rosterFile, setRosterFile] = useState(savedSetupDraft?.rosterFileName ? { name: savedSetupDraft.rosterFileName } : null)
   const [parsedCount, setParsedCount] = useState(savedSetupDraft?.parsedCount || 0)
   const [parsedRoster, setParsedRoster] = useState(savedSetupDraft?.parsedRoster || [])
+  const [captainKekaIdsInput, setCaptainKekaIdsInput] = useState(savedSetupDraft?.captainKekaIdsInput || '')
+  const [captainNamesInput, setCaptainNamesInput] = useState(savedSetupDraft?.captainNamesInput || '')
   const [status, setStatus] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const fileRef = useRef()
@@ -30,9 +54,11 @@ export default function SetupView({ onComplete }) {
       basePurse,
       rosterFileName: rosterFile?.name || '',
       parsedCount,
-      parsedRoster
+      parsedRoster,
+      captainKekaIdsInput,
+      captainNamesInput
     }))
-  }, [imagePath, teamsInput, basePurse, rosterFile, parsedCount, parsedRoster])
+  }, [imagePath, teamsInput, basePurse, rosterFile, parsedCount, parsedRoster, captainKekaIdsInput, captainNamesInput])
 
   const normalizeHeader = (value) =>
     String(value ?? '')
@@ -56,6 +82,18 @@ export default function SetupView({ onComplete }) {
 
     return ''
   }
+
+  const parseList = (value) =>
+    value
+      .split(/[\n,]/)
+      .map(item => item.trim())
+      .filter(Boolean)
+
+  const normalizeText = (value) =>
+    String(value ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
@@ -113,14 +151,15 @@ export default function SetupView({ onComplete }) {
         ])
 
         const cleanData = dataRows.map(row => {
+          const skillLevel = String(skillLevelIndex >= 0 ? row[skillLevelIndex] : '').trim()
           return {
             KekaID: String(kekaIdIndex >= 0 ? row[kekaIdIndex] : '').trim(),
             Name: String(nameIndex >= 0 ? row[nameIndex] : '').trim(),
             Role: String(roleIndex >= 0 ? row[roleIndex] : '').trim(),
-            SkillLevel: String(skillLevelIndex >= 0 ? row[skillLevelIndex] : '').trim(),
+            SkillLevel: skillLevel,
             Email: String(emailIndex >= 0 ? row[emailIndex] : '').trim(),
             ImagePath: String(photoIndex >= 0 ? row[photoIndex] : '').trim(),
-            BasePrice: 2,
+            BasePrice: getBasePriceFromSkillLevel(skillLevel),
             Status: "Unsold",
             WinningTeam: "None",
             WinningBid: 0
@@ -142,23 +181,54 @@ export default function SetupView({ onComplete }) {
     if (!teamsInput.trim()) { setErrorMsg('At least one team name is required'); return }
     if (parsedRoster.length === 0) { setErrorMsg('Please upload a valid roster Excel file'); return }
 
+    const captainKekaIds = parseList(captainKekaIdsInput)
+    const captainNames = parseList(captainNamesInput)
+    if (captainKekaIds.length === 0 && captainNames.length === 0) {
+      setErrorMsg('Please provide captain Keka IDs or captain names')
+      return
+    }
+
     setErrorMsg('')
     setStatus('loading')
 
     const teamNames = teamsInput.split(',').map(t => t.trim()).filter(Boolean)
+    const captainKekaIdSet = new Set(captainKekaIds.map(normalizeText))
+    const captainNameSet = new Set(captainNames.map(normalizeText))
+    
+    // Mark captains in roster and set their base price
+    const rosterWithCaptains = parsedRoster.map(player => ({
+      ...player,
+      IsCaptain:
+        captainKekaIdSet.has(normalizeText(player.KekaID)) ||
+        captainNameSet.has(normalizeText(player.Name)),
+      SkillLevel:
+        captainKekaIdSet.has(normalizeText(player.KekaID)) ||
+        captainNameSet.has(normalizeText(player.Name))
+          ? 'Captain'
+          : player.SkillLevel,
+      BasePrice:
+        captainKekaIdSet.has(normalizeText(player.KekaID)) ||
+        captainNameSet.has(normalizeText(player.Name))
+          ? CAPTAIN_BASE_PRICE
+          : player.BasePrice
+    }))
 
     try {
       await axios.post('http://localhost:8080/api/set-config', {
         imagePath: imagePath.trim(),
         teams: teamNames,
-        basePurse: parseInt(basePurse)
+        basePurse: parseInt(basePurse),
+        captainKekaIds,
+        captainNames
       })
       setStatus('success')
       setTimeout(() => {
-        onComplete(parsedRoster, {
+        onComplete(rosterWithCaptains, {
           imagePath: imagePath.trim(),
           teams: teamNames,
-          basePurse: parseInt(basePurse)
+          basePurse: parseInt(basePurse),
+          captainKekaIds,
+          captainNames
         })
       }, 800)
     } catch (err) {
@@ -264,6 +334,24 @@ export default function SetupView({ onComplete }) {
             {errorMsg}
           </div>
         )}
+
+        <Field icon={<Users size={16} />} label="Captain Keka IDs" hint="Comma- or newline-separated IDs from backend">
+          <textarea
+            value={captainKekaIdsInput}
+            onChange={e => setCaptainKekaIdsInput(e.target.value)}
+            placeholder="IG0227, IG0310, IG0441"
+            style={{ ...inputStyle, minHeight: '88px', resize: 'vertical' }}
+          />
+        </Field>
+
+        <Field icon={<Users size={16} />} label="Captain Names" hint="Optional fallback if IDs are not available">
+          <textarea
+            value={captainNamesInput}
+            onChange={e => setCaptainNamesInput(e.target.value)}
+            placeholder="Rahul Sharma, Arjun Patel, Vikram Singh"
+            style={{ ...inputStyle, minHeight: '88px', resize: 'vertical' }}
+          />
+        </Field>
 
         <button
           onClick={handleSubmit}

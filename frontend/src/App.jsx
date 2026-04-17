@@ -32,6 +32,7 @@ export default function App() {
   const [toast, setToast] = useState({ visible: false, message: '' })
   const [refreshStep, setRefreshStep] = useState(0)
   const [clearConfirm, setClearConfirm] = useState(false)
+  const [isReauction, setIsReauction] = useState(false)
   const lastSessionRef = useRef(null)
   const toastTimerRef = useRef(null)
   const allowReloadRef = useRef(false)
@@ -177,8 +178,28 @@ export default function App() {
   }
 
   const handleAuctionDone = (updatedRoster) => {
-    setMasterRoster(updatedRoster)
+    if (isReauction) {
+      // Merge re-auctioned players back into master roster
+      const mergedRoster = masterRoster.map(originalPlayer => {
+        const reauctionedVersion = updatedRoster.find(p => p.KekaID === originalPlayer.KekaID)
+        return reauctionedVersion || originalPlayer
+      })
+      setMasterRoster(mergedRoster)
+      setIsReauction(false)
+    } else {
+      setMasterRoster(updatedRoster)
+    }
     setView('export')
+  }
+
+  const handleReauction = (unsoldPlayers) => {
+    // Reset auction state for re-auctioning unsold players
+    localStorage.removeItem('cricket-auction-auction-draft')
+    localStorage.removeItem('cricket-auction-bid-snapshots')
+    
+    setIsReauction(true)
+    // Re-enter auction view with only unsold players
+    setView('auction')
   }
 
   const handleRestart = () => {
@@ -272,12 +293,14 @@ export default function App() {
           config={config}
           onDone={handleAuctionDone}
           onClearSession={clearSession}
+          isReauction={isReauction}
         />
       )}
       {view === 'export' && (
         <ExportView
           masterRoster={masterRoster}
           onRestart={handleRestart}
+          onReauction={handleReauction}
           onClearSession={clearSession}
         />
       )}

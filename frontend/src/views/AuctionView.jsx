@@ -34,11 +34,22 @@ const readBidSnapshots = () => {
   }
 }
 
-export default function AuctionView({ masterRoster, config, onDone }) {
+export default function AuctionView({ masterRoster, config, onDone, isReauction }) {
   const savedDraft = readDraft()
   const savedBidSnapshots = readBidSnapshots()
-  const [roster, setRoster] = useState(savedDraft?.roster || masterRoster)
+  
+  // Separate captains and regular players
+  const captains = masterRoster.filter(p => p.IsCaptain)
+  const regularPlayers = masterRoster.filter(p => !p.IsCaptain)
+  
+  // Filter roster: if re-auction, only show unsold players; otherwise show all
+  const initialRoster = isReauction 
+    ? masterRoster.filter(p => p.Status === 'Unsold')
+    : masterRoster
+  
+  const [roster, setRoster] = useState(savedDraft?.roster || initialRoster)
   const [currentIndex, setCurrentIndex] = useState(savedDraft?.currentIndex || 0)
+  const [auctionPhase, setAuctionPhase] = useState(savedDraft?.auctionPhase || 'captain') // 'captain' or 'player'
   const [teams, setTeams] = useState([])
   const [selectedTeam, setSelectedTeam] = useState(savedDraft?.selectedTeam || '')
   const [bidAmount, setBidAmount] = useState(savedDraft?.bidAmount || '')
@@ -53,6 +64,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
       currentIndex: nextState.currentIndex,
       selectedTeam: nextState.selectedTeam,
       bidAmount: nextState.bidAmount,
+      auctionPhase: nextState.auctionPhase,
       savedAt: Date.now()
     }))
   }
@@ -63,14 +75,20 @@ export default function AuctionView({ masterRoster, config, onDone }) {
       currentIndex,
       selectedTeam,
       bidAmount,
+      auctionPhase,
       savedAt: Date.now()
     })
     localStorage.setItem(BIDS_KEY, JSON.stringify(bidSnapshots.slice(0, 20)))
-  }, [roster, currentIndex, selectedTeam, bidAmount, bidSnapshots])
+  }, [roster, currentIndex, selectedTeam, bidAmount, auctionPhase, bidSnapshots])
 
-  const unsoldPlayers = roster.filter(p => p.Status === 'Unsold')
-  const soldCount = roster.filter(p => p.Status === 'Sold').length
-  const currentPlayer = roster[currentIndex] || null
+  // Filter roster based on current phase
+  const phaseRoster = auctionPhase === 'captain'
+    ? roster.filter(p => p.IsCaptain && p.Status !== 'Sold')
+    : roster.filter(p => !p.IsCaptain && p.Status !== 'Sold')
+
+  const unsoldPlayers = phaseRoster.filter(p => p.Status === 'Unsold')
+  const soldCount = phaseRoster.filter(p => p.Status === 'Sold').length
+  const currentPlayer = phaseRoster[currentIndex] || null
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -88,6 +106,27 @@ export default function AuctionView({ masterRoster, config, onDone }) {
     const interval = setInterval(fetchTeams, 5000)
     return () => clearInterval(interval)
   }, [fetchTeams])
+
+  useEffect(() => {
+    if (auctionPhase !== 'captain' || teams.length === 0) return
+
+    const selectedTeamName = teams.find(team => team.id === selectedTeam)?.name || ''
+    const eligibleTeam = teams.find(team => !roster.some(player =>
+      player.IsCaptain &&
+      player.Status === 'Sold' &&
+      player.WinningTeam === team.name
+    ))
+
+    if (!eligibleTeam) return
+
+    if (!selectedTeamName || selectedTeamName === '' || roster.some(player =>
+      player.IsCaptain &&
+      player.Status === 'Sold' &&
+      player.WinningTeam === selectedTeamName
+    )) {
+      setSelectedTeam(eligibleTeam.id)
+    }
+  }, [auctionPhase, teams, roster, selectedTeam])
 
   useEffect(() => {
     setImgError(false)
@@ -135,6 +174,26 @@ export default function AuctionView({ masterRoster, config, onDone }) {
     return filename ? `${API}/images/${filename}` : ''
   }
 
+  const teamsWithoutCaptain = teams.filter(team => !roster.some(player =>
+    player.IsCaptain &&
+    player.Status === 'Sold' &&
+    player.WinningTeam === team.name
+  ))
+
+  const allTeamsHaveCaptain = (rosterSnapshot) =>
+    teams.length > 0 && teams.every(team => rosterSnapshot.some(player =>
+      player.IsCaptain &&
+      player.Status === 'Sold' &&
+      player.WinningTeam === team.name
+    ))
+
+  const teamHasCaptain = (teamName) =>
+    roster.some(player =>
+      player.IsCaptain &&
+      player.Status === 'Sold' &&
+      player.WinningTeam === teamName
+    )
+
   const handleSell = async () => {
     if (!selectedTeam) { setBidMsg('Select a team'); setBidStatus('error'); return }
     const amount = parseInt(bidAmount)
@@ -142,6 +201,12 @@ export default function AuctionView({ masterRoster, config, onDone }) {
     if (!currentPlayer) return
 
     const team = teams.find(t => t.id === selectedTeam)
+    if (auctionPhase === 'captain' && teamHasCaptain(team?.name || selectedTeam)) {
+      setBidMsg(`${team?.name || 'This team'} already has a captain`)
+      setBidStatus('error')
+      return
+    }
+
     if (team && amount > team.budget) {
       setBidMsg(`${team.name} only has ${formatInLakhs(team.budget)} left`)
       setBidStatus('error')
@@ -165,13 +230,14 @@ export default function AuctionView({ masterRoster, config, onDone }) {
 
       pushBidSnapshot(previousState)
 
-      const updatedRoster = roster.map((p, i) => {
-        if (i === currentIndex) {
+      const updatedRoster = roster.map((p) => {
+        if (p.KekaID === currentPlayer.KekaID) {
           return {
             ...p,
             Status: 'Sold',
             WinningTeam: team?.name || selectedTeam,
-            WinningBid: amount
+            WinningBid: amount,
+            Round: isReauction ? 2 : 1
           }
         }
         return p
@@ -190,8 +256,8 @@ export default function AuctionView({ masterRoster, config, onDone }) {
 
   const handleSkip = () => {
     if (!currentPlayer) return
-    const updatedRoster = roster.map((p, i) =>
-      i === currentIndex ? { ...p, Status: 'Unsold' } : p
+    const updatedRoster = roster.map((p) =>
+      p.KekaID === currentPlayer.KekaID ? { ...p, Status: 'Unsold' } : p
     )
     setRoster(updatedRoster)
     setBidStatus('skip')
@@ -200,18 +266,74 @@ export default function AuctionView({ masterRoster, config, onDone }) {
   }
 
   const advancePlayer = (updatedRoster) => {
+    const nextPhaseRoster = auctionPhase === 'captain'
+      ? updatedRoster.filter(p => p.IsCaptain && p.Status !== 'Sold')
+      : updatedRoster.filter(p => !p.IsCaptain && p.Status !== 'Sold')
+
     let next = currentIndex + 1
-    while (next < updatedRoster.length && updatedRoster[next].Status === 'Sold') {
+    while (next < nextPhaseRoster.length && nextPhaseRoster[next].Status === 'Sold') {
       next++
     }
-    if (next >= updatedRoster.length) {
-      onDone(updatedRoster)
+
+    if (next >= nextPhaseRoster.length) {
+      if (auctionPhase === 'captain') {
+        if (!allTeamsHaveCaptain(updatedRoster)) {
+          setRoster(updatedRoster)
+          setCurrentIndex(0)
+          setSelectedTeam('')
+          setBidAmount('')
+          setBidStatus('skip')
+          setBidMsg(`Re-running captain auction for ${teamsWithoutCaptain.length} team(s) still without captains`)
+          return
+        }
+
+        const rosterAfterCaptains = updatedRoster.map(p => {
+          if (p.IsCaptain && p.Status === 'Unsold') {
+            return {
+              ...p,
+              IsCaptain: false,
+              SkillLevel: 'Advanced',
+              BasePrice: 6
+            }
+          }
+          return p
+        })
+
+        setRoster(rosterAfterCaptains)
+        setAuctionPhase('player')
+        setCurrentIndex(0)
+        setSelectedTeam('')
+        setBidAmount('')
+      } else {
+        onDone(updatedRoster)
+      }
     } else {
+      if (auctionPhase === 'captain' && allTeamsHaveCaptain(updatedRoster)) {
+        const rosterAfterCaptains = updatedRoster.map(p => {
+          if (p.IsCaptain && p.Status === 'Unsold') {
+            return {
+              ...p,
+              IsCaptain: false,
+              SkillLevel: 'Advanced',
+              BasePrice: 6
+            }
+          }
+          return p
+        })
+
+        setRoster(rosterAfterCaptains)
+        setAuctionPhase('player')
+        setCurrentIndex(0)
+        setSelectedTeam('')
+        setBidAmount('')
+        return
+      }
+
       setCurrentIndex(next)
     }
   }
 
-  const progress = Math.round((soldCount / roster.length) * 100)
+  const progress = Math.round((soldCount / phaseRoster.length) * 100)
 
   if (!currentPlayer) {
     return (
@@ -245,7 +367,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
-              Player {currentIndex + 1} of {roster.length}
+              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {currentIndex + 1} of {phaseRoster.length}
             </span>
             <span style={{ color: 'var(--green)', fontSize: '0.8rem', fontWeight: 600 }}>
               {soldCount} Sold · {unsoldPlayers.length} Remaining
@@ -333,7 +455,7 @@ export default function AuctionView({ masterRoster, config, onDone }) {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <StatChip label="SKILL LEVEL" value={currentPlayer.SkillLevel || 'N/A'} />
+              <StatChip label="SKILL LEVEL" value={currentPlayer.IsCaptain ? 'Captain' : (currentPlayer.SkillLevel || 'N/A')} />
               <StatChip label="BASE PRICE" value={formatInLakhs(currentPlayer.BasePrice)} highlight />
               <StatChip label="ROLE" value={currentPlayer.Role || 'N/A'} />
               <StatChip label="STATUS" value={currentPlayer.Status} />
@@ -376,8 +498,8 @@ export default function AuctionView({ masterRoster, config, onDone }) {
                 }}
               >
                 {teams.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({formatInLakhs(t.budget)})
+                  <option key={t.id} value={t.id} disabled={auctionPhase === 'captain' && teamHasCaptain(t.name)}>
+                    {t.name} ({formatInLakhs(t.budget)}){auctionPhase === 'captain' && teamHasCaptain(t.name) ? ' - Captain assigned' : ''}
                   </option>
                 ))}
               </select>

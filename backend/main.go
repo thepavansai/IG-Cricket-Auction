@@ -22,9 +22,11 @@ type Team struct {
 }
 
 type SetConfigRequest struct {
-	ImagePath string   `json:"imagePath"`
-	Teams     []string `json:"teams"`
-	BasePurse int64    `json:"basePurse"`
+	ImagePath      string   `json:"imagePath"`
+	Teams          []string `json:"teams"`
+	BasePurse      int64    `json:"basePurse"`
+	CaptainKekaIDs []string `json:"captainKekaIds"`
+	CaptainNames   []string `json:"captainNames"`
 }
 
 type BidRequest struct {
@@ -92,7 +94,7 @@ func setConfigHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Mounted image server at: %s", req.ImagePath)
 	}
 
-	log.Printf("Config set: %d teams, purse %d, imagePath: %s", len(req.Teams), req.BasePurse, req.ImagePath)
+	log.Printf("Config set: %d teams, purse %d, imagePath: %s, captainsById=%d, captainsByName=%d", len(req.Teams), req.BasePurse, req.ImagePath, len(req.CaptainKekaIDs), len(req.CaptainNames))
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
