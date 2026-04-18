@@ -38,10 +38,6 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const savedDraft = readDraft()
   const savedBidSnapshots = isReauction ? [] : readBidSnapshots()
   
-  // Separate captains and regular players
-  const captains = masterRoster.filter(p => p.IsCaptain)
-  const regularPlayers = masterRoster.filter(p => !p.IsCaptain)
-  
   // Filter roster: if re-auction, only show unsold players; otherwise show all
   const initialRoster = isReauction 
     ? masterRoster.filter(p => p.Status === 'Unsold')
@@ -64,10 +60,14 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const [bidMsg, setBidMsg] = useState('')
   const [imgError, setImgError] = useState(false)
   const [storageWarning, setStorageWarning] = useState({ message: '', persistent: false })
+  const [phaseNotice, setPhaseNotice] = useState({ visible: false, message: '' })
+  const [showCaptainTransitionConfirm, setShowCaptainTransitionConfirm] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState('ok')
   const failCountRef = useRef(0)
   const warningTimerRef = useRef(null)
+  const phaseNoticeTimerRef = useRef(null)
   const advanceTimerRef = useRef(null)
+  const captainTransitionPendingRef = useRef(null)
   const preserveBidAmountOnNextPlayerChangeRef = useRef(false)
 
   const clearAdvanceTimer = () => {
@@ -101,6 +101,19 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         warningTimerRef.current = null
       }, 2600)
     }
+  }
+
+  const showPhaseNotice = (message) => {
+    if (phaseNoticeTimerRef.current) {
+      clearTimeout(phaseNoticeTimerRef.current)
+      phaseNoticeTimerRef.current = null
+    }
+
+    setPhaseNotice({ visible: true, message })
+    phaseNoticeTimerRef.current = setTimeout(() => {
+      setPhaseNotice({ visible: false, message: '' })
+      phaseNoticeTimerRef.current = null
+    }, 2600)
   }
 
   const safeSetItem = (key, value) => {
@@ -151,9 +164,19 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       if (warningTimerRef.current) {
         clearTimeout(warningTimerRef.current)
       }
+      if (phaseNoticeTimerRef.current) {
+        clearTimeout(phaseNoticeTimerRef.current)
+      }
       clearAdvanceTimer()
     }
   }, [])
+
+  useEffect(() => {
+    if (auctionPhase !== 'captain') {
+      setShowCaptainTransitionConfirm(false)
+      captainTransitionPendingRef.current = null
+    }
+  }, [auctionPhase])
 
   // Filter roster based on current phase
   const phaseRoster = auctionPhase === 'captain'
@@ -167,7 +190,6 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const unsoldPlayers = activePlayers.filter(p => p.Status === 'Unsold')
   const soldCount = phaseRoster.filter(p => p.Status === 'Sold').length
   const currentPlayer = playerPoolForCurrent.find(p => p.KekaID === currentPlayerKekaID) || activePlayers[0] || null
-  const displayIndex = playerPoolForCurrent.findIndex(p => p.KekaID === currentPlayerKekaID)
   const currentPhaseIndex = phaseRoster.findIndex(p => p.KekaID === currentPlayerKekaID)
   const remainingCount = Math.max(phaseRoster.length - soldCount, 0)
   const displayTotal = phaseRoster.length
@@ -251,6 +273,21 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     setBidSnapshots(currentSnapshots => [snapshot, ...currentSnapshots].slice(0, 20))
   }
 
+  const resolveCaptainTransitionChoice = (moveToPlayerAuction) => {
+    const pending = captainTransitionPendingRef.current
+    captainTransitionPendingRef.current = null
+    setShowCaptainTransitionConfirm(false)
+
+    if (!pending) return
+
+    if (moveToPlayerAuction) {
+      showPhaseNotice('Moving to player auction...')
+      scheduleAdvance(pending.updatedRoster, pending.previousPlayerKekaID, 120)
+    } else {
+      showPhaseNotice('Staying on last captain bid.')
+    }
+  }
+
   const reversePreviousBid = async () => {
     if (bidSnapshots.length === 0) {
       setBidStatus('error')
@@ -263,6 +300,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     setBidStatus('loading')
     try {
       clearAdvanceTimer()
+      setShowCaptainTransitionConfirm(false)
+      captainTransitionPendingRef.current = null
       await axios.post(`${API}/api/reverse-bid`)
 
       const restoredRoster = roster.map(player =>
@@ -400,6 +439,15 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       setBidMsg(`${forceSell ? 'Force sold' : 'Sold'} to ${team?.name} for ${formatInLakhs(amount)}!`)
       await fetchTeams()
 
+      if (auctionPhase === 'captain' && allTeamsHaveCaptain(updatedRoster)) {
+        captainTransitionPendingRef.current = {
+          updatedRoster,
+          previousPlayerKekaID: currentPlayer.KekaID
+        }
+        setShowCaptainTransitionConfirm(true)
+        return
+      }
+
       scheduleAdvance(updatedRoster, currentPlayer.KekaID, 1200)
     } catch (err) {
       setBidStatus('error')
@@ -438,7 +486,12 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           setSelectedTeam('')
           setBidAmount('')
           setBidStatus('skip')
-          setBidMsg(`Re-running captain auction for ${teamsWithoutCaptain.length} team(s) still without captains`)
+          const teamsStillWithoutCaptain = teams.filter(team => !updatedRoster.some(player =>
+            player.IsCaptain &&
+            player.Status === 'Sold' &&
+            player.WinningTeam === team.name
+          ))
+          setBidMsg(`Re-running captain auction for ${teamsStillWithoutCaptain.length} team(s) still without captains`)
           return
         }
 
@@ -960,6 +1013,78 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           END AUCTION & EXPORT
         </button>
       </div>
+
+      {phaseNotice.visible && (
+        <div style={{
+          position: 'fixed',
+          right: '18px',
+          bottom: '18px',
+          zIndex: 1200,
+          background: 'var(--grad-gold)',
+          color: 'var(--text)',
+          border: '1px solid rgba(255,214,0,0.35)',
+          borderLeft: '3px solid var(--gold)',
+          borderRadius: '10px',
+          padding: '10px 12px',
+          fontSize: '0.82rem',
+          maxWidth: '320px',
+          boxShadow: '0 10px 26px rgba(0,0,0,0.35)'
+        }}>
+          {phaseNotice.message}
+        </div>
+      )}
+
+      {showCaptainTransitionConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.45)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1300,
+          padding: '1rem'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '420px',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: '12px',
+            padding: '1rem'
+          }}>
+            <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.35rem', color: 'var(--gold)', marginBottom: '0.5rem' }}>
+              Captain Auction Complete?
+            </div>
+            <div style={{ color: 'var(--muted)', fontSize: '0.88rem', marginBottom: '0.9rem' }}>
+              All teams now have captains. Move to player auction now?
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => resolveCaptainTransitionChoice(false)}
+                style={{
+                  ...btnStyle('var(--bg3)', 'var(--muted)'),
+                  border: '1px solid var(--border)',
+                  padding: '9px 12px',
+                  fontSize: '0.88rem'
+                }}
+              >
+                No, stay in captains
+              </button>
+              <button
+                onClick={() => resolveCaptainTransitionChoice(true)}
+                style={{
+                  ...btnStyle('var(--gold)', '#111'),
+                  padding: '9px 12px',
+                  fontSize: '0.88rem'
+                }}
+              >
+                Yes, move to players
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

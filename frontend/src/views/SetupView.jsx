@@ -252,7 +252,7 @@ export default function SetupView({ onComplete }) {
             type="text"
             value={imagePath}
             onChange={e => setImagePath(e.target.value)}
-            placeholder="C:\Photos\Players"
+            placeholder="C:\\Photos\\Players"
             style={inputStyle}
           />
         </Field>
@@ -388,7 +388,7 @@ export default function SetupView({ onComplete }) {
           Make sure sure your backend Go server is running on <code style={{ background: 'var(--bg2)', padding: '2px 4px', borderRadius: '4px' }}>http://localhost:8080</code> for the setup to work.
         </p>
         <p style={{ color: 'var(--muted)', fontSize: '0.75rem', textAlign: 'center', margin: '6px 0 0' }}>
-          Setup autosaves locally and keeps the last 3 backups so you can recover after a refresh.
+          Setup autosaves locally so you can recover after a refresh.
         </p>
       </div>
     </div>
