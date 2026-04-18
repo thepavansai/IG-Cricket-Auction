@@ -344,6 +344,7 @@ export default function App() {
       {view === 'export' && (
         <ExportView
           masterRoster={masterRoster}
+          config={config}
           onRestart={handleRestart}
           onReauction={handleReauction}
           onClearSession={clearSession}

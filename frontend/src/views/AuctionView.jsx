@@ -67,6 +67,23 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const [connectionStatus, setConnectionStatus] = useState('ok')
   const failCountRef = useRef(0)
   const warningTimerRef = useRef(null)
+  const advanceTimerRef = useRef(null)
+  const preserveBidAmountOnNextPlayerChangeRef = useRef(false)
+
+  const clearAdvanceTimer = () => {
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current)
+      advanceTimerRef.current = null
+    }
+  }
+
+  const scheduleAdvance = (updatedRoster, previousPlayerKekaID, delayMs) => {
+    clearAdvanceTimer()
+    advanceTimerRef.current = setTimeout(() => {
+      advancePlayer(updatedRoster, previousPlayerKekaID)
+      advanceTimerRef.current = null
+    }, delayMs)
+  }
 
   const showToast = (message, options = {}) => {
     const persistent = Boolean(options.persistent)
@@ -134,6 +151,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       if (warningTimerRef.current) {
         clearTimeout(warningTimerRef.current)
       }
+      clearAdvanceTimer()
     }
   }, [])
 
@@ -143,11 +161,17 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     : roster.filter(p => !p.IsCaptain)
 
   const activePlayers = phaseRoster.filter(p => p.Status !== 'Sold')
+  const isTransitioningPlayer = bidStatus === 'loading' || bidStatus === 'success'
+  const playerPoolForCurrent = isTransitioningPlayer ? phaseRoster : activePlayers
 
   const unsoldPlayers = activePlayers.filter(p => p.Status === 'Unsold')
   const soldCount = phaseRoster.filter(p => p.Status === 'Sold').length
-  const currentPlayer = activePlayers.find(p => p.KekaID === currentPlayerKekaID) || activePlayers[0] || null
-  const displayIndex = activePlayers.findIndex(p => p.KekaID === currentPlayerKekaID)
+  const currentPlayer = playerPoolForCurrent.find(p => p.KekaID === currentPlayerKekaID) || activePlayers[0] || null
+  const displayIndex = playerPoolForCurrent.findIndex(p => p.KekaID === currentPlayerKekaID)
+  const currentPhaseIndex = phaseRoster.findIndex(p => p.KekaID === currentPlayerKekaID)
+  const remainingCount = Math.max(phaseRoster.length - soldCount, 0)
+  const displayTotal = phaseRoster.length
+  const displayPosition = ((currentPhaseIndex >= 0 ? currentPhaseIndex : 0) + 1)
 
   useEffect(() => {
     if (activePlayers.length === 0) {
@@ -157,10 +181,14 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       return
     }
 
+    if (isTransitioningPlayer) {
+      return
+    }
+
     if (!activePlayers.some(player => player.KekaID === currentPlayerKekaID)) {
       setCurrentPlayerKekaID(activePlayers[0].KekaID)
     }
-  }, [activePlayers, currentPlayerKekaID])
+  }, [activePlayers, currentPlayerKekaID, isTransitioningPlayer])
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -212,8 +240,12 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     setImgError(false)
     setBidStatus(null)
     setBidMsg('')
-    setBidAmount('')
-  }, [currentPlayerKekaID])
+    if (preserveBidAmountOnNextPlayerChangeRef.current) {
+      preserveBidAmountOnNextPlayerChangeRef.current = false
+      return
+    }
+    setBidAmount(currentPlayer?.BasePrice ? String(currentPlayer.BasePrice) : '')
+  }, [currentPlayerKekaID, currentPlayer?.BasePrice])
 
   const pushBidSnapshot = (snapshot) => {
     setBidSnapshots(currentSnapshots => [snapshot, ...currentSnapshots].slice(0, 20))
@@ -230,6 +262,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
     setBidStatus('loading')
     try {
+      clearAdvanceTimer()
       await axios.post(`${API}/api/reverse-bid`)
 
       const restoredRoster = roster.map(player =>
@@ -247,6 +280,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         ? restoredRoster.filter(player => player.IsCaptain && player.Status !== 'Sold')
         : restoredRoster.filter(player => !player.IsCaptain && player.Status !== 'Sold')
 
+      preserveBidAmountOnNextPlayerChangeRef.current = true
       setRoster(restoredRoster)
       setCurrentPlayerKekaID(previous.currentPlayerKekaID || restoredPhaseRoster[0]?.KekaID || null)
       setSelectedTeam(previous.selectedTeam)
@@ -366,7 +400,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       setBidMsg(`${forceSell ? 'Force sold' : 'Sold'} to ${team?.name} for ${formatInLakhs(amount)}!`)
       await fetchTeams()
 
-      setTimeout(() => advancePlayer(updatedRoster), 1200)
+      scheduleAdvance(updatedRoster, currentPlayer.KekaID, 1200)
     } catch (err) {
       setBidStatus('error')
       setBidMsg(err.response?.data || 'Bid failed')
@@ -381,25 +415,26 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     setRoster(updatedRoster)
     setBidStatus('skip')
     setBidMsg('Player skipped')
-    setTimeout(() => advancePlayer(updatedRoster), 600)
+    scheduleAdvance(updatedRoster, currentPlayer.KekaID, 600)
   }
 
-  const advancePlayer = (updatedRoster) => {
-    const nextPhaseRoster = auctionPhase === 'captain'
-      ? updatedRoster.filter(p => p.IsCaptain && p.Status !== 'Sold')
-      : updatedRoster.filter(p => !p.IsCaptain && p.Status !== 'Sold')
+  const advancePlayer = (updatedRoster, previousPlayerKekaID = currentPlayerKekaID) => {
+    const phasePlayers = auctionPhase === 'captain'
+      ? updatedRoster.filter(p => p.IsCaptain)
+      : updatedRoster.filter(p => !p.IsCaptain)
 
-    const currentPosition = nextPhaseRoster.findIndex(player => player.KekaID === currentPlayerKekaID)
+    const currentPosition = phasePlayers.findIndex(player => player.KekaID === previousPlayerKekaID)
     let next = currentPosition >= 0 ? currentPosition + 1 : 0
-    while (next < nextPhaseRoster.length && nextPhaseRoster[next].Status === 'Sold') {
+    while (next < phasePlayers.length && phasePlayers[next].Status === 'Sold') {
       next++
     }
 
-    if (next >= nextPhaseRoster.length) {
+    if (next >= phasePlayers.length) {
       if (auctionPhase === 'captain') {
         if (!allTeamsHaveCaptain(updatedRoster)) {
           setRoster(updatedRoster)
-          setCurrentPlayerKekaID(nextPhaseRoster[0]?.KekaID || null)
+          const firstPendingCaptain = phasePlayers.find(player => player.Status !== 'Sold')
+          setCurrentPlayerKekaID(firstPendingCaptain?.KekaID || null)
           setSelectedTeam('')
           setBidAmount('')
           setBidStatus('skip')
@@ -451,7 +486,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         return
       }
 
-      setCurrentPlayerKekaID(nextPhaseRoster[next]?.KekaID || null)
+      setCurrentPlayerKekaID(phasePlayers[next]?.KekaID || null)
     }
   }
 
@@ -473,6 +508,9 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
   const photoUrl = getPhotoUrl(currentPlayer)
   const playerByKekaID = new Map(masterRoster.map(player => [player.KekaID, player]))
+  roster.forEach(player => {
+    playerByKekaID.set(player.KekaID, player)
+  })
 
   return (
     <div style={{
@@ -490,10 +528,10 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
-              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {(displayIndex >= 0 ? displayIndex : 0) + 1} of {activePlayers.length}
+              {auctionPhase === 'captain' ? '👑 CAPTAIN' : '🎯 PLAYER'} {displayPosition} of {displayTotal}
             </span>
             <span style={{ color: 'var(--green)', fontSize: '0.8rem', fontWeight: 600 }}>
-              {soldCount} Sold · {unsoldPlayers.length} Remaining
+              {soldCount} Sold · {remainingCount} Remaining
             </span>
           </div>
           <div style={{
@@ -882,24 +920,25 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
                     marginTop: '8px',
                     display: 'flex', flexWrap: 'wrap', gap: '4px'
                   }}>
-                    {(() => {
-                      const captainId = team.roster.find(kid => playerByKekaID.get(kid)?.IsCaptain)
-                      const captain = captainId ? playerByKekaID.get(captainId) : null
-                      if (!captain) return null
-
+                    {team.roster.map((kid) => {
+                      const player = playerByKekaID.get(kid)
+                      const isCaptain = Boolean(player?.IsCaptain)
                       return (
-                        <span style={{
-                          background: 'var(--bg)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '0.65rem',
-                          color: 'var(--gold)',
-                          border: '1px solid rgba(255,214,0,0.3)'
-                        }}>
-                          {captain.Name}
+                        <span
+                          key={`${team.id}-${kid}`}
+                          style={{
+                            background: 'var(--bg)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '0.65rem',
+                            color: isCaptain ? 'var(--gold)' : 'var(--text)',
+                            border: isCaptain ? '1px solid rgba(255,214,0,0.3)' : '1px solid var(--border)'
+                          }}
+                        >
+                          {player?.Name || kid}
                         </span>
                       )
-                    })()}
+                    })}
                   </div>
                 )}
               </div>

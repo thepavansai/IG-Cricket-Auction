@@ -75,6 +75,8 @@ func setConfigHandler(w http.ResponseWriter, r *http.Request) {
 	teams = make(map[string]*Team)
 	teamOrder = []string{}
 	bidHistory = []BidHistoryEntry{}
+	imageServer = nil
+	imageMount = false
 
 	// Initialize teams
 	for i, name := range req.Teams {
@@ -137,6 +139,25 @@ func bidHandler(w http.ResponseWriter, r *http.Request) {
 	if !exists {
 		http.Error(w, "Team not found", http.StatusNotFound)
 		return
+	}
+
+	if req.Amount <= 0 {
+		http.Error(w, "Bid amount must be greater than zero", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(req.KekaID) == "" {
+		http.Error(w, "KekaID is required", http.StatusBadRequest)
+		return
+	}
+
+	for _, existingTeam := range teams {
+		for _, rosterKekaID := range existingTeam.Roster {
+			if rosterKekaID == req.KekaID {
+				http.Error(w, "Player already sold", http.StatusConflict)
+				return
+			}
+		}
 	}
 
 	if !req.IgnoreBudget && team.Budget < req.Amount {

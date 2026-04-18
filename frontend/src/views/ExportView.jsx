@@ -11,7 +11,7 @@ const formatInLakhs = (amount) => {
   return `${value.toLocaleString('en-IN')} L`
 }
 
-export default function ExportView({ masterRoster, onRestart, onReauction }) {
+export default function ExportView({ masterRoster, config, onRestart, onReauction }) {
   const [exported, setExported] = useState(false)
 
   const soldPlayers = masterRoster.filter(p => p.Status === 'Sold')
@@ -26,12 +26,23 @@ export default function ExportView({ masterRoster, onRestart, onReauction }) {
   const round2Players = soldPlayers.filter(p => p.Round === 2)
 
   const teamTally = soldPlayers.reduce((acc, p) => {
-    if (!acc[p.WinningTeam]) acc[p.WinningTeam] = { count: 0, spend: 0, captains: 0 }
+    if (!acc[p.WinningTeam]) acc[p.WinningTeam] = { count: 0, spend: 0, captains: [] }
     acc[p.WinningTeam].count++
     acc[p.WinningTeam].spend += p.WinningBid
-    if (p.IsCaptain) acc[p.WinningTeam].captains++
+    if (p.IsCaptain) acc[p.WinningTeam].captains.push(p.Name)
     return acc
   }, {})
+
+  const allTeams = (config?.teams && config.teams.length > 0)
+    ? config.teams
+    : Object.keys(teamTally)
+
+  const teamBreakdown = allTeams
+    .map(team => ({
+      team,
+      data: teamTally[team] || { count: 0, spend: 0, captains: [] }
+    }))
+    .sort((a, b) => b.data.spend - a.data.spend)
 
   const handleExport = () => {
     const wb = XLSX.utils.book_new()
@@ -97,7 +108,7 @@ export default function ExportView({ masterRoster, onRestart, onReauction }) {
         marginBottom: '2rem'
       }}>
         <SummaryCard icon={<Trophy size={20} />} label="Players Sold" value={soldPlayers.length} color="var(--gold)" />
-        <SummaryCard icon={<Users size={20} />} label="Total Teams" value={Object.keys(teamTally).length} color="var(--green)" />
+        <SummaryCard icon={<Users size={20} />} label="Total Teams" value={allTeams.length} color="var(--green)" />
         <SummaryCard icon={<FileSpreadsheet size={20} />} label="Total Bid Value" value={formatInLakhs(soldPlayers.reduce((s, p) => s + p.WinningBid, 0))} color="var(--text)" />
       </div>
 
@@ -132,7 +143,7 @@ export default function ExportView({ masterRoster, onRestart, onReauction }) {
         </div>
       )}
 
-      {Object.keys(teamTally).length > 0 && (
+      {teamBreakdown.length > 0 && (
         <div style={{
           background: 'var(--card)',
           border: '1px solid var(--border)',
@@ -147,9 +158,8 @@ export default function ExportView({ masterRoster, onRestart, onReauction }) {
             TEAM BREAKDOWN
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {Object.entries(teamTally)
-              .sort((a, b) => b[1].spend - a[1].spend)
-              .map(([team, data]) => (
+            {teamBreakdown
+              .map(({ team, data }) => (
                 <div key={team} style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -160,12 +170,12 @@ export default function ExportView({ masterRoster, onRestart, onReauction }) {
                 }}>
                   <div style={{ fontWeight: 600 }}>{team}</div>
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    {data.captains > 0 && (
+                    {data.captains.length > 0 && (
                       <span style={{ color: 'var(--gold)', fontSize: '0.85rem', fontWeight: 600 }}>
-                        👑 {data.captains}
+                        👑 {data.captains.join(', ')}
                       </span>
                     )}
-                    <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{data.count} total</span>
+                    <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{data.count} players</span>
                     <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: '0.9rem' }}>{formatInLakhs(data.spend)} spent</span>
                   </div>
                 </div>
