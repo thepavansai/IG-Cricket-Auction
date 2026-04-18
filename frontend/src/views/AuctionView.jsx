@@ -412,7 +412,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
             return {
               ...p,
               IsCaptain: false,
-              SkillLevel: 'Advanced',
+              SkillLevel: 'Expert',
               BasePrice: 6
             }
           }
@@ -435,7 +435,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
             return {
               ...p,
               IsCaptain: false,
-              SkillLevel: 'Advanced',
+              SkillLevel: 'Expert',
               BasePrice: 6
             }
           }

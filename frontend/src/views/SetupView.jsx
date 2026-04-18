@@ -7,7 +7,7 @@ import { Upload, FolderOpen, Users, DollarSign, CheckCircle, AlertCircle } from 
 const SKILL_LEVEL_PRICES = {
   BEGINNER: 2,
   INTERMEDIATE: 4,
-  ADVANCED: 6
+  EXPERT: 6
 }
 
 // ─── Captain Base Price Enum ─────────────────────────────────────────────
@@ -20,7 +20,7 @@ const getBasePriceFromSkillLevel = (skillLevel) => {
   
   if (normalized.includes('beginner')) return SKILL_LEVEL_PRICES.BEGINNER
   if (normalized.includes('intermediate')) return SKILL_LEVEL_PRICES.INTERMEDIATE
-  if (normalized.includes('advanced')) return SKILL_LEVEL_PRICES.ADVANCED
+  if (normalized.includes('expert')) return SKILL_LEVEL_PRICES.EXPERT
   
   return SKILL_LEVEL_PRICES.BEGINNER // default
 }
