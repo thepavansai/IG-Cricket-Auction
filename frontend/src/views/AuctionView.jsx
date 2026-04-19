@@ -40,7 +40,9 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   
   // Filter roster: if re-auction, only show unsold players; otherwise show all
   const initialRoster = isReauction 
-    ? masterRoster.filter(p => p.Status === 'Unsold')
+    ? masterRoster
+      .filter(p => p.Status === 'Unsold')
+      .map(p => ({ ...p, Visited: false }))
     : masterRoster
   
   const [roster, setRoster] = useState((!isReauction && savedDraft?.roster) ? savedDraft.roster : initialRoster)
@@ -183,7 +185,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     ? roster.filter(p => p.IsCaptain)
     : roster.filter(p => !p.IsCaptain)
 
-  const activePlayers = phaseRoster.filter(p => p.Status !== 'Sold')
+  const activePlayers = phaseRoster.filter(p => p.Status !== 'Sold' && !p.Visited)
   const isTransitioningPlayer = bidStatus === 'loading' || bidStatus === 'success'
   const playerPoolForCurrent = isTransitioningPlayer ? phaseRoster : activePlayers
 
@@ -311,7 +313,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
               Status: previous.previousPlayerState.Status,
               WinningTeam: previous.previousPlayerState.WinningTeam,
               WinningBid: previous.previousPlayerState.WinningBid,
-              Round: previous.previousPlayerState.Round
+              Round: previous.previousPlayerState.Round,
+              Visited: previous.previousPlayerState.Visited
             }
           : player
       )
@@ -406,7 +409,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           Status: currentPlayer.Status,
           WinningTeam: currentPlayer.WinningTeam,
           WinningBid: currentPlayer.WinningBid,
-          Round: currentPlayer.Round
+          Round: currentPlayer.Round,
+          Visited: currentPlayer.Visited
         },
         currentPlayerKekaID: currentPlayer.KekaID,
         selectedTeam,
@@ -458,7 +462,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const handleSkip = () => {
     if (!currentPlayer) return
     const updatedRoster = roster.map((p) =>
-      p.KekaID === currentPlayer.KekaID ? { ...p, Status: 'Unsold' } : p
+      p.KekaID === currentPlayer.KekaID ? { ...p, Status: 'Unsold', Visited: true } : p
     )
     setRoster(updatedRoster)
     setBidStatus('skip')
@@ -473,7 +477,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
     const currentPosition = phasePlayers.findIndex(player => player.KekaID === previousPlayerKekaID)
     let next = currentPosition >= 0 ? currentPosition + 1 : 0
-    while (next < phasePlayers.length && phasePlayers[next].Status === 'Sold') {
+    while (next < phasePlayers.length && (phasePlayers[next].Status === 'Sold' || phasePlayers[next].Visited)) {
       next++
     }
 
@@ -481,7 +485,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       if (auctionPhase === 'captain') {
         if (!allTeamsHaveCaptain(updatedRoster)) {
           setRoster(updatedRoster)
-          const firstPendingCaptain = phasePlayers.find(player => player.Status !== 'Sold')
+          const firstPendingCaptain = phasePlayers.find(player => player.Status !== 'Sold' && !player.Visited)
           setCurrentPlayerKekaID(firstPendingCaptain?.KekaID || null)
           setSelectedTeam('')
           setBidAmount('')
@@ -501,7 +505,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
               ...p,
               IsCaptain: false,
               SkillLevel: 'Expert',
-              BasePrice: 6
+              BasePrice: 6,
+              Visited: false
             }
           }
           return p
@@ -509,7 +514,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
         setRoster(rosterAfterCaptains)
         setAuctionPhase('player')
-        const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold')
+        const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold' && !player.Visited)
         setCurrentPlayerKekaID(firstPlayer?.KekaID || null)
         setSelectedTeam('')
         setBidAmount('')
@@ -524,7 +529,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
               ...p,
               IsCaptain: false,
               SkillLevel: 'Expert',
-              BasePrice: 6
+              BasePrice: 6,
+              Visited: false
             }
           }
           return p
@@ -532,7 +538,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
         setRoster(rosterAfterCaptains)
         setAuctionPhase('player')
-        const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold')
+        const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold' && !player.Visited)
         setCurrentPlayerKekaID(firstPlayer?.KekaID || null)
         setSelectedTeam('')
         setBidAmount('')

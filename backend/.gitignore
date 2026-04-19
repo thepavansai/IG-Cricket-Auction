@@ -1,6 +1,6 @@
 # Binaries
 cricket-auction
-exe
+*.exe
 *.dll
 *.so
 *.dylib

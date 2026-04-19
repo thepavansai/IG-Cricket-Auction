@@ -243,6 +243,13 @@ func imageProxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Image server not configured", http.StatusServiceUnavailable)
 		return
 	}
+
+	path := r.URL.Path
+	if strings.Contains(path, "..") {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		log.Printf("Blocked potential directory traversal attempt: %s", path)
+		return
+	}
 	handler.ServeHTTP(w, r)
 }
 
