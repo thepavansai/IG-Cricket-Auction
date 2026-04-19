@@ -518,6 +518,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         setCurrentPlayerKekaID(firstPlayer?.KekaID || null)
         setSelectedTeam('')
         setBidAmount('')
+        return
       } else {
         onDone(updatedRoster)
       }
@@ -539,7 +540,12 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         setRoster(rosterAfterCaptains)
         setAuctionPhase('player')
         const firstPlayer = rosterAfterCaptains.find(player => !player.IsCaptain && player.Status !== 'Sold' && !player.Visited)
-        setCurrentPlayerKekaID(firstPlayer?.KekaID || null)
+        if (firstPlayer) {
+          setCurrentPlayerKekaID(firstPlayer.KekaID)
+        } else {
+          onDone(rosterAfterCaptains)
+          return
+        }
         setSelectedTeam('')
         setBidAmount('')
         return
