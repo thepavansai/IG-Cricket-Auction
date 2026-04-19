@@ -248,7 +248,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   }, [fetchTeams])
 
   useEffect(() => {
-    if (auctionPhase !== 'captain' || teams.length === 0) return
+    if (teams.length === 0) return
 
     const selectedTeamName = teams.find(team => team.id === selectedTeam)?.name || ''
     const eligibleTeam = teams.find(team => !roster.some(player =>
@@ -259,11 +259,11 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
     if (!eligibleTeam) return
 
-    if (!selectedTeamName || selectedTeamName === '' || roster.some(player =>
+    if (!selectedTeamName || selectedTeamName === '' || (auctionPhase === 'captain' && roster.some(player =>
       player.IsCaptain &&
       player.Status === 'Sold' &&
       player.WinningTeam === selectedTeamName
-    )) {
+    ))) {
       setSelectedTeam(eligibleTeam.id)
     }
   }, [auctionPhase, teams, roster, selectedTeam])
@@ -326,7 +326,8 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
             }
           : player
       )
-      const restoredPhaseRoster = auctionPhase === 'captain'
+      const restoredPhaseForLookup = previous.auctionPhase || auctionPhase
+      const restoredPhaseRoster = restoredPhaseForLookup === 'captain'
         ? restoredRoster.filter(player => player.IsCaptain && player.Status !== 'Sold')
         : restoredRoster.filter(player => !player.IsCaptain && player.Status !== 'Sold')
 
@@ -340,7 +341,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       setBidAmount(previous.bidAmount)
       setBidSnapshots(currentSnapshots => currentSnapshots.slice(1))
 
-      setBidStatus('skip')
+      setBidStatus('success')
       setBidMsg(`Reversed bid for ${previous.playerName}`)
     } catch (err) {
       setBidStatus('error')
@@ -399,13 +400,19 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     }
 
     const team = teams.find(t => t.id === selectedTeam)
-    if (auctionPhase === 'captain' && teamHasCaptain(team?.name || selectedTeam)) {
-      setBidMsg(`${team?.name || 'This team'} already has a captain`)
+    if (!team) {
+      setBidMsg('Selected team not found')
       setBidStatus('error')
       return
     }
 
-    if (!forceSell && team && amount > team.budget) {
+    if (auctionPhase === 'captain' && teamHasCaptain(team.name)) {
+      setBidMsg(`${team.name} already has a captain`)
+      setBidStatus('error')
+      return
+    }
+
+    if (!forceSell && amount > team.budget) {
       setBidMsg(`${team.name} only has ${formatInLakhs(team.budget)} left`)
       setBidStatus('error')
       return
@@ -413,6 +420,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
     setBidStatus('loading')
     try {
+      const teamName = team.name
       const previousState = {
         changedPlayerKekaID: currentPlayer.KekaID,
         previousPlayerState: {
@@ -442,7 +450,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
           return {
             ...p,
             Status: 'Sold',
-            WinningTeam: team?.name || selectedTeam,
+            WinningTeam: teamName,
             WinningBid: amount,
             Round: isReauction ? 2 : 1
           }
@@ -451,7 +459,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       })
       setRoster(updatedRoster)
       setBidStatus('success')
-      setBidMsg(`${forceSell ? 'Force sold' : 'Sold'} to ${team?.name} for ${formatInLakhs(amount)}!`)
+      setBidMsg(`${forceSell ? 'Force sold' : 'Sold'} to ${teamName} for ${formatInLakhs(amount)}!`)
       await fetchTeams()
 
       if (auctionPhase === 'captain' && allTeamsHaveCaptain(updatedRoster)) {
