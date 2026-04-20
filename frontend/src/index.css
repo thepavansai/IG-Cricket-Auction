@@ -9,6 +9,12 @@
   --gold: #f59e0b;
   --gold-dim: #b45309;
   --red: #ef4444;
+  --skill-expert: #fb923c;
+  --skill-intermediate: #38bdf8;
+  --skill-beginner: #a3e635;
+  --skill-expert-bg: rgba(251, 146, 60, 0.14);
+  --skill-intermediate-bg: rgba(56, 189, 248, 0.14);
+  --skill-beginner-bg: rgba(163, 230, 53, 0.14);
   --bg: #0f1115;
   --bg2: #151922;
   --bg3: #1e2532;
@@ -29,6 +35,12 @@
   --gold: #b45309;
   --gold-dim: #92400e;
   --red: #dc2626;
+  --skill-expert: #c2410c;
+  --skill-intermediate: #0369a1;
+  --skill-beginner: #4d7c0f;
+  --skill-expert-bg: rgba(194, 65, 12, 0.12);
+  --skill-intermediate-bg: rgba(3, 105, 161, 0.12);
+  --skill-beginner-bg: rgba(77, 124, 15, 0.12);
   --bg: #ffffff;
   --bg2: #f5f7fa;
   --bg3: #e9edf3;

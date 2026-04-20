@@ -34,6 +34,59 @@ const readBidSnapshots = () => {
   }
 }
 
+const normalizeSkillLevel = (skillLevel, isCaptain = false) => {
+  if (isCaptain) return 'captain'
+
+  const normalized = String(skillLevel || '').toLowerCase().trim()
+  if (normalized.includes('expert')) return 'expert'
+  if (normalized.includes('intermediate')) return 'intermediate'
+  if (normalized.includes('beginner')) return 'beginner'
+  if (normalized.includes('captain')) return 'captain'
+  return 'default'
+}
+
+const getSkillStyle = (skillLevel, isCaptain = false) => {
+  const level = normalizeSkillLevel(skillLevel, isCaptain)
+
+  if (level === 'captain') {
+    return {
+      textColor: 'var(--gold)',
+      borderColor: 'rgba(255,214,0,0.3)',
+      backgroundColor: 'rgba(255,214,0,0.08)'
+    }
+  }
+
+  if (level === 'expert') {
+    return {
+      textColor: 'var(--skill-expert)',
+      borderColor: 'var(--skill-expert)',
+      backgroundColor: 'var(--skill-expert-bg)'
+    }
+  }
+
+  if (level === 'intermediate') {
+    return {
+      textColor: 'var(--skill-intermediate)',
+      borderColor: 'var(--skill-intermediate)',
+      backgroundColor: 'var(--skill-intermediate-bg)'
+    }
+  }
+
+  if (level === 'beginner') {
+    return {
+      textColor: 'var(--skill-beginner)',
+      borderColor: 'var(--skill-beginner)',
+      backgroundColor: 'var(--skill-beginner-bg)'
+    }
+  }
+
+  return {
+    textColor: 'var(--text)',
+    borderColor: 'var(--border)',
+    backgroundColor: 'var(--bg)'
+  }
+}
+
 export default function AuctionView({ masterRoster, config, onDone, isReauction }) {
   const savedDraft = readDraft()
   const savedBidSnapshots = isReauction ? [] : readBidSnapshots()
@@ -718,7 +771,11 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <StatChip label="SKILL LEVEL" value={currentPlayer.IsCaptain ? 'Captain' : (currentPlayer.SkillLevel || 'N/A')} />
+              <StatChip
+                label="SKILL LEVEL"
+                value={currentPlayer.IsCaptain ? 'Captain' : (currentPlayer.SkillLevel || 'N/A')}
+                skillStyle={getSkillStyle(currentPlayer.SkillLevel, currentPlayer.IsCaptain)}
+              />
               <StatChip label="BASE PRICE" value={formatInLakhs(currentPlayer.BasePrice)} highlight />
               <StatChip label="ROLE" value={currentPlayer.Role || 'N/A'} />
               <StatChip label="STATUS" value={currentPlayer.Status} />
@@ -1024,17 +1081,17 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
                   }}>
                     {team.roster.map((kid) => {
                       const player = playerByKekaID.get(kid)
-                      const isCaptain = Boolean(player?.IsCaptain)
+                      const skillStyle = getSkillStyle(player?.SkillLevel, Boolean(player?.IsCaptain))
                       return (
                         <span
                           key={`${team.id}-${kid}`}
                           style={{
-                            background: 'var(--bg)',
+                            background: skillStyle.backgroundColor,
                             padding: '2px 6px',
                             borderRadius: '4px',
                             fontSize: '0.65rem',
-                            color: isCaptain ? 'var(--gold)' : 'var(--text)',
-                            border: isCaptain ? '1px solid rgba(255,214,0,0.3)' : '1px solid var(--border)'
+                            color: skillStyle.textColor,
+                            border: `1px solid ${skillStyle.borderColor}`
                           }}
                         >
                           {player?.Name || kid}
@@ -1138,13 +1195,15 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   )
 }
 
-function StatChip({ label, value, highlight }) {
+function StatChip({ label, value, highlight, skillStyle }) {
   return (
     <div style={{
       background: 'var(--bg3)',
       borderRadius: '8px',
       padding: '8px 12px',
-      border: highlight ? '1px solid rgba(255,214,0,0.3)' : '1px solid var(--border)'
+      border: highlight
+        ? '1px solid rgba(255,214,0,0.3)'
+        : (skillStyle ? `1px solid ${skillStyle.borderColor}` : '1px solid var(--border)')
     }}>
       <div style={{ fontSize: '0.6rem', color: 'var(--muted)', marginBottom: '2px', letterSpacing: '0.08em' }}>
         {label}
@@ -1152,7 +1211,7 @@ function StatChip({ label, value, highlight }) {
       <div style={{
         fontWeight: 700,
         fontSize: '0.9rem',
-        color: highlight ? 'var(--gold)' : 'var(--text)'
+        color: highlight ? 'var(--gold)' : (skillStyle?.textColor || 'var(--text)')
       }}>
         {value}
       </div>
