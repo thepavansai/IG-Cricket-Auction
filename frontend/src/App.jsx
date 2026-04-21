@@ -190,6 +190,8 @@ export default function App() {
   }
 
   const handleSetupComplete = (roster, cfg) => {
+    localStorage.removeItem('cricket-auction-auction-draft')
+    localStorage.removeItem('cricket-auction-bid-snapshots')
     setMasterRoster(roster)
     setConfig(cfg)
     setView('auction')
@@ -269,7 +271,7 @@ export default function App() {
               lineHeight: 1,
               letterSpacing: '0.1em',
               color: 'var(--green)'
-            }}>CRICKET AUCTION</span>
+            }}>🏏CRICKET AUCTION</span>
           </div>
           <span style={{
             display: 'inline-flex',

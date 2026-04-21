@@ -8,6 +8,7 @@ import {
 const API = 'http://localhost:8080'
 const AUCTION_DRAFT_KEY = 'cricket-auction-auction-draft'
 const BIDS_KEY = 'cricket-auction-bid-snapshots'
+const AUCTION_DEBUG_KEY = 'cricket-auction-debug'
 
 const formatInLakhs = (amount) => {
   const value = Number(amount || 0)
@@ -90,6 +91,27 @@ const getSkillStyle = (skillLevel, isCaptain = false) => {
 export default function AuctionView({ masterRoster, config, onDone, isReauction }) {
   const savedDraft = readDraft()
   const savedBidSnapshots = isReauction ? [] : readBidSnapshots()
+  const hasValidDraftRoster = Array.isArray(savedDraft?.roster)
+  const canRestoreDraft = (() => {
+    if (isReauction || !hasValidDraftRoster) return false
+
+    const draftRoster = savedDraft.roster
+    if (draftRoster.length !== masterRoster.length) return false
+
+    const masterIds = new Set(masterRoster.map(player => player.KekaID))
+    const draftIds = new Set(draftRoster.map(player => player.KekaID))
+    if (masterIds.size !== draftIds.size) return false
+    for (const id of masterIds) {
+      if (!draftIds.has(id)) return false
+    }
+
+    const draftPhase = savedDraft?.auctionPhase === 'player' ? 'player' : 'captain'
+    const hasActiveDraftPlayer = draftPhase === 'captain'
+      ? draftRoster.some(player => player.IsCaptain && player.Status !== 'Sold')
+      : draftRoster.some(player => !player.IsCaptain && player.Status !== 'Sold' && !player.Visited)
+
+    return hasActiveDraftPlayer
+  })()
   
   // Filter roster: if re-auction, only show unsold players; otherwise show all
   const initialRoster = isReauction 
@@ -98,18 +120,18 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       .map(p => ({ ...p, Visited: false }))
     : masterRoster
   
-  const [roster, setRoster] = useState((!isReauction && savedDraft?.roster) ? savedDraft.roster : initialRoster)
+  const [roster, setRoster] = useState(canRestoreDraft ? savedDraft.roster : initialRoster)
   const [currentPlayerKekaID, setCurrentPlayerKekaID] = useState(
-    (!isReauction && (savedDraft?.currentPlayerKekaID || initialRoster[savedDraft?.currentIndex || 0]?.KekaID))
+    (canRestoreDraft && (savedDraft?.currentPlayerKekaID || initialRoster[savedDraft?.currentIndex || 0]?.KekaID))
       || initialRoster[0]?.KekaID
       || null
   )
   const [auctionPhase, setAuctionPhase] = useState(
-    isReauction ? 'player' : (savedDraft?.auctionPhase || 'captain')
+    isReauction ? 'player' : (canRestoreDraft ? (savedDraft?.auctionPhase || 'captain') : 'captain')
   ) // 'captain' or 'player'
   const [teams, setTeams] = useState([])
-  const [selectedTeam, setSelectedTeam] = useState(isReauction ? '' : (savedDraft?.selectedTeam || ''))
-  const [bidAmount, setBidAmount] = useState(isReauction ? '' : (savedDraft?.bidAmount || ''))
+  const [selectedTeam, setSelectedTeam] = useState(isReauction ? '' : (canRestoreDraft ? (savedDraft?.selectedTeam || '') : ''))
+  const [bidAmount, setBidAmount] = useState(isReauction ? '' : (canRestoreDraft ? (savedDraft?.bidAmount || '') : ''))
   const [bidSnapshots, setBidSnapshots] = useState(Array.isArray(savedBidSnapshots) ? savedBidSnapshots : [])
   const [bidStatus, setBidStatus] = useState(null)
   const [bidMsg, setBidMsg] = useState('')
@@ -126,6 +148,20 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const preserveBidAmountOnNextPlayerChangeRef = useRef(false)
   const advancePlayerRef = useRef(null)
   const selectedTeamRef = useRef(selectedTeam)
+
+  const shouldDebugLog = () => {
+    if (typeof window === 'undefined') return false
+
+    const searchParams = new URLSearchParams(window.location.search)
+    if (searchParams.get('auctionDebug') === '1') return true
+
+    return localStorage.getItem(AUCTION_DEBUG_KEY) === '1'
+  }
+
+  const debugLog = (...args) => {
+    if (!shouldDebugLog()) return
+    console.log('[AuctionDebug]', ...args)
+  }
 
   const clearAdvanceTimer = () => {
     if (advanceTimerRef.current) {
@@ -217,6 +253,13 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   }, [roster, currentPlayerKekaID, selectedTeam, bidAmount, auctionPhase, bidSnapshots])
 
   useEffect(() => {
+    if (!isReauction && !canRestoreDraft) {
+      localStorage.removeItem(AUCTION_DRAFT_KEY)
+      localStorage.removeItem(BIDS_KEY)
+    }
+  }, [canRestoreDraft, isReauction])
+
+  useEffect(() => {
     return () => {
       if (warningTimerRef.current) {
         clearTimeout(warningTimerRef.current)
@@ -231,6 +274,18 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   useEffect(() => {
     selectedTeamRef.current = selectedTeam
   }, [selectedTeam])
+
+  useEffect(() => {
+    debugLog('Init state snapshot', {
+      isReauction,
+      canRestoreDraft,
+      auctionPhase,
+      rosterCount: roster.length,
+      captainCount: roster.filter(player => player.IsCaptain).length,
+      playerCount: roster.filter(player => !player.IsCaptain).length,
+      currentPlayerKekaID
+    })
+  }, [])
 
   useEffect(() => {
     if (auctionPhase !== 'captain') {
@@ -259,18 +314,31 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const displayPosition = ((currentPhaseIndex >= 0 ? currentPhaseIndex : 0) + 1)
 
   useEffect(() => {
+    // During sell/transition animations, avoid clearing current player
+    // or the UI can jump to the auction-complete fallback prematurely.
+    if (isTransitioningPlayer) {
+      return
+    }
+
     if (activePlayers.length === 0) {
+      debugLog('No active players in current phase', {
+        auctionPhase,
+        phaseRosterCount: phaseRoster.length,
+        soldInPhase: phaseRoster.filter(player => player.Status === 'Sold').length,
+        currentPlayerKekaID
+      })
       if (currentPlayerKekaID !== null) {
         setCurrentPlayerKekaID(null)
       }
       return
     }
 
-    if (isTransitioningPlayer) {
-      return
-    }
-
     if (!activePlayers.some(player => player.KekaID === currentPlayerKekaID)) {
+      debugLog('Adjusting current player to first active player', {
+        auctionPhase,
+        from: currentPlayerKekaID,
+        to: activePlayers[0]?.KekaID
+      })
       setCurrentPlayerKekaID(activePlayers[0].KekaID)
     }
   }, [activePlayers, currentPlayerKekaID, isTransitioningPlayer])
@@ -304,19 +372,42 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
     if (teams.length === 0) return
 
     const selectedTeamName = teams.find(team => team.id === selectedTeam)?.name || ''
+
+    if (auctionPhase !== 'captain') {
+      if (!selectedTeamName || selectedTeamName === '') {
+        debugLog('Auto-selecting first team in player phase', {
+          selectedTeam,
+          autoTeamId: teams[0]?.id
+        })
+        setSelectedTeam(teams[0].id)
+      }
+      return
+    }
+
     const eligibleTeam = teams.find(team => !roster.some(player =>
       player.IsCaptain &&
       player.Status === 'Sold' &&
       player.WinningTeam === team.name
     ))
 
-    if (!eligibleTeam) return
+    if (!eligibleTeam) {
+      debugLog('No eligible team left for captain phase auto-select', {
+        selectedTeam,
+        selectedTeamName
+      })
+      return
+    }
 
     if (!selectedTeamName || selectedTeamName === '' || (auctionPhase === 'captain' && roster.some(player =>
       player.IsCaptain &&
       player.Status === 'Sold' &&
       player.WinningTeam === selectedTeamName
     ))) {
+      debugLog('Auto-selecting eligible captain team', {
+        from: selectedTeam,
+        to: eligibleTeam.id,
+        selectedTeamName
+      })
       setSelectedTeam(eligibleTeam.id)
     }
   }, [auctionPhase, teams, roster, selectedTeam])
@@ -343,11 +434,19 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
     if (!pending) return
 
+    debugLog('Captain transition modal choice', {
+      moveToPlayerAuction,
+      previousPlayerKekaID: pending.previousPlayerKekaID,
+      captainsSold: pending.updatedRoster.filter(player => player.IsCaptain && player.Status === 'Sold').length,
+      totalCaptains: pending.updatedRoster.filter(player => player.IsCaptain).length
+    })
+
     if (moveToPlayerAuction) {
       showPhaseNotice('Moving to player auction...')
       scheduleAdvance(pending.updatedRoster, pending.previousPlayerKekaID, 120)
     } else {
-      showPhaseNotice('Staying on last captain bid.')
+      showPhaseNotice('Finishing captain round...')
+      scheduleAdvance(pending.updatedRoster, pending.previousPlayerKekaID, 120)
     }
   }
 
@@ -433,6 +532,14 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   const handleSell = async (options = {}) => {
     const forceSell = Boolean(options.forceSell)
 
+    debugLog('Sell attempt', {
+      auctionPhase,
+      forceSell,
+      currentPlayerKekaID: currentPlayer?.KekaID,
+      selectedTeam,
+      bidAmount
+    })
+
     if (!selectedTeam) { setBidMsg('Select a team'); setBidStatus('error'); return }
     const parsedBid = parseInt(bidAmount, 10)
     if (!currentPlayer) return
@@ -515,6 +622,13 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
       setBidMsg(`${forceSell ? 'Force sold' : 'Sold'} to ${teamName} for ${formatInLakhs(amount)}!`)
       await fetchTeams()
 
+      debugLog('Sell success', {
+        auctionPhase,
+        soldPlayerKekaID: currentPlayer.KekaID,
+        soldTo: teamName,
+        allTeamsHaveCaptainAfterSell: allTeamsHaveCaptain(updatedRoster)
+      })
+
       if (auctionPhase === 'captain' && allTeamsHaveCaptain(updatedRoster)) {
         captainTransitionPendingRef.current = {
           updatedRoster,
@@ -551,12 +665,28 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   }
 
   const advancePlayer = (updatedRoster, previousPlayerKekaID = currentPlayerKekaID) => {
+    debugLog('advancePlayer called', {
+      auctionPhase,
+      previousPlayerKekaID,
+      captainCount: updatedRoster.filter(player => player.IsCaptain).length,
+      unsoldCaptainCount: updatedRoster.filter(player => player.IsCaptain && player.Status !== 'Sold').length,
+      unsoldPlayerCount: updatedRoster.filter(player => !player.IsCaptain && player.Status !== 'Sold').length
+    })
+
     if (auctionPhase === 'captain') {
       const allCaptains = updatedRoster.filter(player => player.IsCaptain)
       const pendingCaptains = allCaptains.filter(player => player.Status !== 'Sold')
 
       if (allTeamsHaveCaptain(updatedRoster)) {
+        debugLog('All teams have captains. Transitioning to player phase.')
         const rosterAfterCaptains = updatedRoster.map(p => {
+          if (!p.IsCaptain && p.Status !== 'Sold') {
+            return {
+              ...p,
+              Visited: false
+            }
+          }
+
           if (p.IsCaptain && p.Status === 'Unsold') {
             return {
               ...p,
@@ -574,9 +704,21 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         const firstPlayer = rosterAfterCaptains.find(player =>
           !player.IsCaptain && player.Status !== 'Sold' && !player.Visited
         )
-        if (firstPlayer) {
-          setCurrentPlayerKekaID(firstPlayer.KekaID)
+        const fallbackPlayer = rosterAfterCaptains.find(player =>
+          !player.IsCaptain && player.Status !== 'Sold'
+        )
+        const nextPlayer = firstPlayer || fallbackPlayer
+        if (nextPlayer) {
+          debugLog('Player phase start player selected', {
+            nextPlayerKekaID: nextPlayer.KekaID,
+            nextPlayerName: nextPlayer.Name
+          })
+          setCurrentPlayerKekaID(nextPlayer.KekaID)
         } else {
+          debugLog('No players available after captain phase. Calling onDone.', {
+            nonCaptainCount: rosterAfterCaptains.filter(player => !player.IsCaptain).length,
+            unsoldNonCaptainCount: rosterAfterCaptains.filter(player => !player.IsCaptain && player.Status !== 'Sold').length
+          })
           onDone(rosterAfterCaptains)
         }
         setSelectedTeam('')
@@ -603,6 +745,7 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
         return
       }
 
+      debugLog('Captain phase has no pending captains and teams not complete. Calling onDone fallback.')
       onDone(updatedRoster)
       return
     }
@@ -628,6 +771,9 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
 
     if (skippedPlayers.length === 0) {
       // Truly done — no fresh, no skipped
+      debugLog('Player phase complete. Calling onDone.', {
+        unsoldPlayersRemaining: phasePlayers.filter(player => player.Status !== 'Sold').length
+      })
       onDone(updatedRoster)
       return
     }
@@ -648,6 +794,12 @@ export default function AuctionView({ masterRoster, config, onDone, isReauction 
   advancePlayerRef.current = advancePlayer
 
   if (!currentPlayer) {
+    debugLog('Rendering auction complete fallback because currentPlayer is null', {
+      auctionPhase,
+      phaseRosterCount: phaseRoster.length,
+      activePlayersCount: activePlayers.length,
+      currentPlayerKekaID
+    })
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <div style={{ textAlign: 'center' }}>
